@@ -91,7 +91,7 @@ impl App {
             }
         }
         let dir = self.paths.fe_data().join("Layouts");
-        let mut names: Vec<String> = std::fs::read_dir(&dir)
+        let mut names: Vec<String> = nfs_platform::fs::read_dir(&dir)
             .into_iter()
             .flatten()
             .flatten()

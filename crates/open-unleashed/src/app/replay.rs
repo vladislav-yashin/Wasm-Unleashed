@@ -1,5 +1,7 @@
 //! Replays: recording, saving, playback and the replay bar.
 
+#[allow(unused_imports)]
+use nfs_platform::PathExt as _;
 use crate::*;
 
 impl App {
@@ -117,8 +119,8 @@ impl App {
             stream: r.stream().to_vec(),
         };
         let bytes = file.write();
-        let res = std::fs::create_dir_all(path.parent().unwrap_or(path))
-            .and_then(|_| std::fs::write(path, bytes));
+        let res = nfs_platform::fs::create_dir_all(path.parent().unwrap_or(path))
+            .and_then(|_| nfs_platform::fs::write(path, bytes));
         // …and the original's own format beside it (`replay.md` §6.1 + §16): the registry snapshot
         // with the fields the port has values for, the final tick and the same stream
         // `NUMCARS` = cops + players + opponents + traffic (0x4ECF00), the traffic cut to fit nine
@@ -129,10 +131,10 @@ impl App {
         // a network race's (`NetSetup` in the setup): the humans and the host's traffic cars kept
         let num_cars = if let Some(n) = file.setup.net.as_ref() { 1 + n.seats.len() as u32 + n.traffic.len() as u32 } else { num_cars };
         // the catalogue's model / sim of an opponent's `.TYPE` for its `.FILENAME` / `.SPECNAME`
-        let catalogue = std::fs::read(self.paths.fe_data().join("Data").join("nfs5.car")).ok().and_then(|d| nfs_formats::fedata::parse_car_catalog(&d).ok()).unwrap_or_default();
+        let catalogue = nfs_platform::fs::read(self.paths.fe_data().join("Data").join("nfs5.car")).ok().and_then(|d| nfs_formats::fedata::parse_car_catalog(&d).ok()).unwrap_or_default();
         let names = |id: u16| catalogue.iter().find(|c| c.id == id).map(|c| (c.model.clone(), c.sim.clone()));
         let rpl = nfs_game::replay::original_rpl_named(&file.setup, file.final_tick, &file.stream, r.ramp, num_cars, &names);
-        if let Err(e) = std::fs::write(path.with_extension("rpl"), rpl) {
+        if let Err(e) = nfs_platform::fs::write(path.with_extension("rpl"), rpl) {
             tracing::debug!(error = %e, "writing the original-format .rpl failed");
         }
         match res {
@@ -147,7 +149,7 @@ impl App {
     /// 0x50D45A after a delete), by name.
     pub(crate) fn replay_names(&self) -> Vec<String> {
         let Some(dir) = self.replay.path.parent() else { return Vec::new() };
-        let mut names: Vec<String> = std::fs::read_dir(dir)
+        let mut names: Vec<String> = nfs_platform::fs::read_dir(dir)
             .into_iter()
             .flatten()
             .flatten()
@@ -187,10 +189,10 @@ impl App {
         let path = dir.join(format!("{name}.rpl"));
         // the port's own file beside the listed `.rpl` is read first (`replay.md` §17): it names the car's
         // body style and carries a network race's humans (§18.15), which the single-car `.rpl` cannot
-        let Some(f) = std::fs::read(path.with_extension("prpl"))
+        let Some(f) = nfs_platform::fs::read(path.with_extension("prpl"))
             .ok()
             .and_then(|d| nfs_game::replay::ReplayFile::parse(&d))
-            .or_else(|| std::fs::read(&path).ok().and_then(|d| read_replay_file(&d)))
+            .or_else(|| nfs_platform::fs::read(&path).ok().and_then(|d| read_replay_file(&d)))
         else {
             tracing::warn!(path = %path.display(), "not a replay file");
             return;
@@ -210,7 +212,7 @@ impl App {
         // 0x49CB50 folds the car's stock parts (0x4EE9A0) and the neutral sliders (0x4EED2D) — the
         // replay file carries neither a part list nor sliders of its own here, so the car is a fresh
         // catalogue car (`fold_fresh_car`)
-        let entry = std::fs::read(self.paths.fe_data().join("Data").join("nfs5.car"))
+        let entry = nfs_platform::fs::read(self.paths.fe_data().join("Data").join("nfs5.car"))
             .ok()
             .and_then(|d| nfs_formats::fedata::parse_car_catalog(&d).ok())
             .and_then(|cat| cat.into_iter().find(|c| (setup.car_id != 0 && c.id == setup.car_id) || (!setup.sim.is_empty() && c.sim.eq_ignore_ascii_case(&setup.sim))));
@@ -333,7 +335,7 @@ impl App {
         let Some(name) = names.get(self.fe.replay_sel.min(names.len().saturating_sub(1))) else { return };
         if let Some(dir) = self.replay.path.parent() {
             let path = dir.join(format!("{name}.rpl"));
-            match std::fs::remove_file(&path) {
+            match nfs_platform::fs::remove_file(&path) {
                 Ok(()) => tracing::info!(path = %path.display(), "replay deleted"),
                 Err(e) => tracing::warn!(path = %path.display(), error = %e, "replay delete failed"),
             }
@@ -471,7 +473,7 @@ impl App {
     fn default_replay_name(&self) -> String {
         (1..)
             .map(|n| format!("Replay{n}"))
-            .find(|name| !self.replay_file(name).exists() && !self.replay_file(name).with_extension("rpl").exists())
+            .find(|name| !self.replay_file(name).host_exists() && !self.replay_file(name).with_extension("rpl").host_exists())
             .unwrap_or_default()
     }
 
@@ -606,7 +608,7 @@ impl App {
         }
         match button {
             0 if !self.replay_save.name.is_empty() => {
-                if self.replay_file(&self.replay_save.name).with_extension("rpl").exists() {
+                if self.replay_file(&self.replay_save.name).with_extension("rpl").host_exists() {
                     tracing::info!(name = %self.replay_save.name, "replay save: the file exists (0x11)");
                     self.replay_save.overwrite = true;
                     self.replay_save.sel = 1;
@@ -807,7 +809,7 @@ pub(crate) fn read_replay_file(d: &[u8]) -> Option<nfs_game::replay::ReplayFile>
 pub(crate) fn resolve_replay_car(paths: &GamePaths, rs: &mut nfs_game::replay::ReplaySetup) {
     if rs.car.is_empty()
         && rs.car_id != 0
-        && let Ok(cat) = std::fs::read(paths.fe_data().join("Data").join("nfs5.car")).map_err(|e| tracing::warn!(error = %e, "nfs5.car"))
+        && let Ok(cat) = nfs_platform::fs::read(paths.fe_data().join("Data").join("nfs5.car")).map_err(|e| tracing::warn!(error = %e, "nfs5.car"))
         && let Ok(entries) = nfs_formats::fedata::parse_car_catalog(&cat)
         && let Some(e) = entries.iter().find(|c| c.id == rs.car_id)
     {

@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/nfs-platform",
     "crates/nfs-formats",
     "crates/nfs-assets",
     "crates/nfs-math",
@@ -25,6 +26,7 @@ license = "GPL-3.0-or-later"
 rust-version = "1.95"
 
 [workspace.dependencies]
+nfs-platform = { path = "crates/nfs-platform" }
 nfs-formats = { path = "crates/nfs-formats" }
 nfs-assets = { path = "crates/nfs-assets" }
 nfs-math = { path = "crates/nfs-math" }

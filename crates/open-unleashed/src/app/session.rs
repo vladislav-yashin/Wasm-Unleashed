@@ -6,9 +6,16 @@ impl App {
     pub(crate) fn resume_inner(&mut self, event_loop: &ActiveEventLoop) {
         let scripted = NO_FOCUS.load(std::sync::atomic::Ordering::Relaxed);
         let played = self.intro_done.is_some();
-        let (window, mut renderer) = match self.intro_done.take() {
+        let ready = self.intro_done.take();
+        #[cfg(target_arch = "wasm32")]
+        let ready = ready.or_else(crate::web::take_renderer);
+        let (window, mut renderer) = match ready {
             Some(wr) => wr,
             None => {
+                #[cfg(target_arch = "wasm32")]
+                { crate::web::begin_renderer(event_loop); return; }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
                 let attrs = Window::default_attributes()
                     .with_title(crate::brand::TITLE)
                     .with_window_icon(crate::brand::window_icon())
@@ -38,6 +45,7 @@ impl App {
                 let window = Arc::new(event_loop.create_window(attrs).expect("window"));
                 let renderer = Renderer::new(window.clone()).expect("renderer");
                 (window, renderer)
+                }
             }
         };
         // **The start-up movies**, 0x4DD600 (main 0x4B6C42, once, on the first entry to the front
@@ -73,7 +81,7 @@ impl App {
         if let Some(m) = self.fe.menu.as_mut() {
             let dir = self.paths.fe_data().join("Art");
             m.font = GamePaths::find_file(&dir, "Univers14b.ffn")
-                .and_then(|p| std::fs::read(p).ok())
+                .and_then(|p| nfs_platform::fs::read(p).ok())
                 .and_then(|d| nfs_formats::fnt::Font::parse(&d).ok())
                 .map(|f| BitmapFont::upload(&mut renderer, f));
         }

@@ -61,7 +61,7 @@ impl LayoutScreen {
     pub fn load_career_tabs(&mut self, r: &mut Renderer, paths: &GamePaths) {
         let dir = paths.fe_data().join("Art");
         let images = GamePaths::find_file(&dir, PACK)
-            .and_then(|p| std::fs::read(&p).ok().map(|d| (p, d)))
+            .and_then(|p| nfs_platform::fs::read(&p).ok().map(|d| (p, d)))
             .and_then(|(p, d)| decode_pack(&p, &d).ok())
             .unwrap_or_default();
         let tabs = TAGS.map(|tag| {
@@ -72,7 +72,7 @@ impl LayoutScreen {
         });
         let mut font = |name: &str| {
             GamePaths::find_file(&dir, name)
-                .and_then(|p| std::fs::read(&p).ok())
+                .and_then(|p| nfs_platform::fs::read(&p).ok())
                 .and_then(|d| nfs_formats::fnt::Font::parse(&d).ok())
                 .map(|f| BitmapFont::upload(r, f))
         };

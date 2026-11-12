@@ -60,12 +60,20 @@ use nfs_physics::{
 };
 use nfs_renderer::{Camera, Renderer, Scene, Sprite, TextureData, TextureId};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use nfs_platform::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
 use winit::event::{DeviceEvent, DeviceId, ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
+#[cfg(target_arch = "wasm32")]
+mod web;
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen(start, js_name = browser_start)]
+fn main() { web::start(); }
+
+#[cfg(not(target_arch = "wasm32"))]
 fn main() {
     diag::init();
     let r = run();
@@ -94,7 +102,7 @@ fn run() -> Result<()> {
         .replay
         .as_ref()
         .and_then(|p| {
-            let d = std::fs::read(p)
+            let d = nfs_platform::fs::read(p)
                 .map_err(|e| tracing::error!(error = %e, path = p, "replay unreadable"))
                 .ok()?;
             read_replay_file(&d)
@@ -184,7 +192,7 @@ fn run() -> Result<()> {
     }
     let car = CarAssets::load(&paths, car_name)?;
     // simulation variant: catalogue entry whose model matches, else "<car>coupe36"-style guess
-    let catalog = nfs_formats::fedata::parse_car_catalog(&std::fs::read(
+    let catalog = nfs_formats::fedata::parse_car_catalog(&nfs_platform::fs::read(
         paths.fe_data().join("Data").join("nfs5.car"),
     )?)?;
     // a replay's car is the catalogue record it names (`car_id`): its body style and roof — the
@@ -268,7 +276,7 @@ fn run() -> Result<()> {
             // no garage record and no parts of its own: a fresh `FECar` (0x4EE9A0 stock parts, 0x4EED2D
             // neutral sliders) — same as `load_career_race`'s
             let stock_ids: Vec<i16> = catalog.iter().find(|c| c.sim.eq_ignore_ascii_case(&sim_name)).map(|c| c.stock_parts.clone()).unwrap_or_default();
-            let table = nfs_formats::career::parse_parts(&std::fs::read(paths.fe_data().join("Data").join("nfs5.prt")).unwrap_or_default()).unwrap_or_default();
+            let table = nfs_formats::career::parse_parts(&nfs_platform::fs::read(paths.fe_data().join("Data").join("nfs5.prt")).unwrap_or_default()).unwrap_or_default();
             nfs_game::career::fold_fresh_car(&mut specs, &stock_ids, &table, &family, cli_automatic);
         } else {
             specs.apply_parts(&r.parts.iter().collect::<Vec<_>>(), &family);
@@ -288,7 +296,7 @@ fn run() -> Result<()> {
             .find(|c| c.sim.eq_ignore_ascii_case(&sim_name))
             .map(|c| c.stock_parts.as_slice())
             .unwrap_or_default();
-        let parts_table = nfs_formats::career::parse_parts(&std::fs::read(paths.fe_data().join("Data").join("nfs5.prt")).unwrap_or_default()).unwrap_or_default();
+        let parts_table = nfs_formats::career::parse_parts(&nfs_platform::fs::read(paths.fe_data().join("Data").join("nfs5.prt")).unwrap_or_default()).unwrap_or_default();
         let family = catalog.iter().find(|c| c.sim.eq_ignore_ascii_case(&sim_name)).map(|c| c.sim_family.clone()).unwrap_or_default();
         // the stock parts (0x4EE9A0) and the constructor's neutral sliders (0x4EED2D) through 0x49CB50;
         // `.TRANSMISSION` is the gearbox option (`cli_automatic` above: `Car.Transmission` index >= 1 = automatic)
@@ -449,7 +457,7 @@ fn run() -> Result<()> {
         .record
         .as_ref()
         .and_then(|p| {
-            let mut w = std::io::BufWriter::new(std::fs::File::create(p).ok()?);
+            let mut w = std::io::BufWriter::new(nfs_platform::fs::File::create(p).ok()?);
             use std::io::Write;
             writeln!(
                 w,
@@ -585,8 +593,8 @@ fn run() -> Result<()> {
     // same `'w'` / `'d'` exchange the network screens run, without a window.
     if let Some(secs) = cli.net_browse {
         let mut lobby = netplay::Lobby::open("browser")?;
-        let until = std::time::Instant::now() + Duration::from_secs_f32(secs);
-        while std::time::Instant::now() < until {
+        let until = nfs_platform::time::Instant::now() + Duration::from_secs_f32(secs);
+        while nfs_platform::time::Instant::now() < until {
             lobby.poll();
             std::thread::sleep(Duration::from_millis(20));
         }
@@ -775,7 +783,13 @@ fn run() -> Result<()> {
     // every `<Axis>.Min` / `.Max` starts at 0 / 0x80 (0x51E546, 0x51E550), the `.Max` clamped to the
     // range's last index 127 by `SetSelection` 0x4BC240
     app.input.axis_bands = [[0, 127]; 8];
+    #[cfg(not(target_arch = "wasm32"))]
     event_loop.run_app(&mut app)?;
+    #[cfg(target_arch = "wasm32")]
+    {
+        use winit::platform::web::EventLoopExtWebSys;
+        event_loop.spawn_app(app);
+    }
     Ok(())
 }
 

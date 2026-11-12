@@ -20,14 +20,14 @@ impl App {
 
     /// `nfs5.car` as the front end's catalogue (`FEData/Data`).
     pub(crate) fn fe_car_catalog(&self) -> Vec<nfs_formats::fedata::CarCatalogEntry> {
-        nfs_formats::fedata::parse_car_catalog(&std::fs::read(self.paths.fe_data().join("Data").join("nfs5.car")).unwrap_or_default()).unwrap_or_default()
+        nfs_formats::fedata::parse_car_catalog(&nfs_platform::fs::read(self.paths.fe_data().join("Data").join("nfs5.car")).unwrap_or_default()).unwrap_or_default()
     }
 
     /// `nfs5.prt` (`FEData/Data`) — the table [`nfs_physics::specs::stock_parts`] resolves a car's
     /// stock ids against outside the career, where [`CareerTables`](nfs_game::career::CareerTables)
     /// (and its own already-parsed copy) is not loaded. `specs.rs:49`.
     pub(crate) fn fe_parts_table(&self) -> Vec<nfs_formats::career::Part> {
-        nfs_formats::career::parse_parts(&std::fs::read(self.paths.fe_data().join("Data").join("nfs5.prt")).unwrap_or_default()).unwrap_or_default()
+        nfs_formats::career::parse_parts(&nfs_platform::fs::read(self.paths.fe_data().join("Data").join("nfs5.prt")).unwrap_or_default()).unwrap_or_default()
     }
 
     /// The block `[0x690410]` as it stands: the series', else the one the profile's `Knockout`
@@ -674,7 +674,7 @@ impl App {
         let dir = nfs_game::save::save_dir();
         nfs_game::save::read_player_lst(&dir)
             .filter(|stem| stem.len() <= 100)
-            .and_then(|stem| std::fs::read(dir.join(format!("{stem}.sav"))).ok())
+            .and_then(|stem| nfs_platform::fs::read(dir.join(format!("{stem}.sav"))).ok())
             .is_some_and(|d| nfs_formats::sav::SaveFile::parse(&d).is_ok())
     }
 

@@ -115,7 +115,7 @@ impl App {
         }
         let Some(renderer) = self.renderer.as_mut() else { return };
         let Some(path) = nfs_assets::GamePaths::find_file(&self.paths.render_dir(), "common.fsh") else { return };
-        let Ok(data) = std::fs::read(&path) else { return };
+        let Ok(data) = nfs_platform::fs::read(&path) else { return };
         let Ok(images) = nfs_assets::texture::decode_pack(&path, &data) else { return };
         let mut quad = nfs_renderer::MeshData::default();
         for (x, y, u, v) in [(-0.5f32, -0.5f32, 0.0f32, 1.0f32), (0.5, -0.5, 1.0, 1.0), (0.5, 0.5, 1.0, 0.0), (-0.5, 0.5, 0.0, 0.0)] {

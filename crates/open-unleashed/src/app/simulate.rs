@@ -598,11 +598,11 @@ impl App {
         if self.net_dump.is_none()
             && self.replay_net.is_some()
             && let Some(path) = nfs_game::config::cfg().nfs_net_dump.as_str()
-            && let Ok(f) = std::fs::File::create(&path)
+            && let Ok(f) = nfs_platform::fs::File::create(&path)
         {
             self.net_dump = Some(std::io::BufWriter::new(f));
             use std::io::Write;
-            if let Ok(mut sf) = std::fs::File::create(format!("{path}.specs"))
+            if let Ok(mut sf) = nfs_platform::fs::File::create(format!("{path}.specs"))
                 && let Some(rn) = self.replay_net.as_ref()
             {
                 let mut cars: Vec<(u32, String)> = vec![(rn.local_index, format!("{:#?}", self.specs))];
@@ -627,7 +627,7 @@ impl App {
             && self.net_dump.is_some()
             && let Some((local, seat_index)) = dump_index.as_ref()
             && let Some(path) = nfs_game::config::cfg().nfs_net_dump.as_str()
-            && let Ok(mut f) = std::fs::File::create(format!("{path}.t1"))
+            && let Ok(mut f) = nfs_platform::fs::File::create(format!("{path}.t1"))
         {
             use std::io::Write;
             let mut cars: Vec<(u32, String)> = Vec::new();
@@ -3632,7 +3632,7 @@ impl App {
             // since Windows started (as `I_MUSIC`'s pick); drawn only when a song ended with the
             // shuffle on
             let rng = &mut self.fe_rng;
-            let ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u32);
+            let ms = nfs_platform::time::SystemTime::now().duration_since(nfs_platform::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u32);
             m.update(a, &mut || rng.next_u32().wrapping_add(ms));
         }
         // tunnel reverb (`engine-audio.md` §4.7): the enclosure test every audio update, then the

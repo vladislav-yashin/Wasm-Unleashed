@@ -116,7 +116,7 @@ impl FeRng {
     pub fn from_clock() -> Self {
         let pinned = crate::config::cfg().nfs_fe_time.as_str().and_then(|v| v.trim().parse::<u32>().ok());
         // det-allow: the original seeds the FE RNG from the clock; FE picks, not the race simulation
-        let t = pinned.unwrap_or_else(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as u32).unwrap_or(0));
+        let t = pinned.unwrap_or_else(|| nfs_platform::time::SystemTime::now().duration_since(nfs_platform::time::UNIX_EPOCH).map(|d| d.as_secs() as u32).unwrap_or(0));
         Self::new(t)
     }
 

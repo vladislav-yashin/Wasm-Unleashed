@@ -23,6 +23,10 @@ pub(crate) fn point_filter() -> bool {
 mod camera;
 mod front;
 mod gpu;
+#[cfg(not(target_arch = "wasm32"))]
+mod prof;
+#[cfg(target_arch = "wasm32")]
+#[path = "web_prof.rs"]
 mod prof;
 
 pub use camera::Camera;

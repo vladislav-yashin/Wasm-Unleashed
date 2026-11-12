@@ -27,6 +27,8 @@
 //! own JSON career of before (`career.json`) is folded in once by [`migrate_legacy_json`] and
 //! renamed; nothing writes it any more.
 
+#[allow(unused_imports)]
+use nfs_platform::PathExt as _;
 use crate::career::{Career, CareerTables, EventResult, OwnedCar, TournamentState};
 use nfs_formats::bytes;
 use nfs_formats::career::{Era, MISSION_RECORD_SIZE, PART_RECORD_SIZE, TOURNAMENT_RECORD_SIZE};
@@ -83,7 +85,7 @@ impl Profile {
 /// a stem of 96 characters is already left out. (history: `game-history.md` §18.1)
 pub fn list_profiles(dir: &Path) -> Vec<Profile> {
     let mut out = Vec::new();
-    let Ok(rd) = std::fs::read_dir(dir) else { return out };
+    let Ok(rd) = nfs_platform::fs::read_dir(dir) else { return out };
     for e in rd.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
         let Some(stem) = name.split('.').next() else { continue };
@@ -102,27 +104,27 @@ pub fn list_profiles(dir: &Path) -> Vec<Profile> {
 /// `IsProfileNameTaken` 0x4DE510: a name is taken if any of the ten digits already uses it, and
 /// the empty name is rejected.
 pub fn name_taken(dir: &Path, name: &str) -> bool {
-    name.is_empty() || (0..=9).any(|d| dir.join(format!("{d}{name}.sav")).exists())
+    name.is_empty() || (0..=9).any(|d| dir.join(format!("{d}{name}.sav")).host_exists())
 }
 
 /// `player.lst` (0x4DEC7B / 0x4DEF70): the raw stem of the profile to auto-select, no terminator,
 /// ignored when longer than 100 bytes.
 pub fn read_player_lst(dir: &Path) -> Option<String> {
-    let d = std::fs::read(dir.join("player.lst")).ok()?;
+    let d = nfs_platform::fs::read(dir.join("player.lst")).ok()?;
     (d.len() <= 0x64).then(|| d.iter().map(|&b| b as char).collect())
 }
 
 pub fn write_player_lst(dir: &Path, stem: &str) -> std::io::Result<()> {
-    std::fs::create_dir_all(dir)?;
-    std::fs::write(dir.join("player.lst"), stem.as_bytes())
+    nfs_platform::fs::create_dir_all(dir)?;
+    nfs_platform::fs::write(dir.join("player.lst"), stem.as_bytes())
 }
 
 /// `DeleteProfile` 0x4DE8A0: the `.sav` plus the two per-profile HUD copies, which carry the name
 /// **without** the digit (`inc esi` at 0x4DE8F8).
 pub fn delete_profile(dir: &Path, p: &Profile) -> std::io::Result<()> {
-    let _ = std::fs::remove_file(dir.join(format!("{}1.hud", p.name)));
-    let _ = std::fs::remove_file(dir.join(format!("{}2.hud", p.name)));
-    std::fs::remove_file(p.path(dir))
+    let _ = nfs_platform::fs::remove_file(dir.join(format!("{}1.hud", p.name)));
+    let _ = nfs_platform::fs::remove_file(dir.join(format!("{}2.hud", p.name)));
+    nfs_platform::fs::remove_file(p.path(dir))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1025,7 +1027,7 @@ pub fn career_from_sav(s: &SaveFile, tables: &CareerTables) -> Career {
 /// `SaveData\<stem>.sav` parsed, or `None` when it is missing or does not parse (`LoadInfo`'s
 /// false, 0x4DE9B0).
 pub fn read_profile(dir: &Path, profile: &Profile) -> Option<SaveFile> {
-    std::fs::read(profile.path(dir)).ok().and_then(|d| SaveFile::parse(&d).ok())
+    nfs_platform::fs::read(profile.path(dir)).ok().and_then(|d| SaveFile::parse(&d).ok())
 }
 
 /// **The one career load** — start-up and every front-end entry (0x4D3B52) alike: the profile's
@@ -1069,13 +1071,13 @@ pub enum Migration {
 /// The JSON is then renamed to `career.json.migrated` (kept for the user, never read again), so
 /// this runs once.
 pub fn migrate_legacy_json(json: &Path, dir: &Path, profile: &Profile, tables: &CareerTables) -> Migration {
-    if !json.exists() {
+    if !json.host_exists() {
         return Migration::None;
     }
     let set_aside = || {
         let mut to = json.as_os_str().to_owned();
         to.push(".migrated");
-        if let Err(e) = std::fs::rename(json, &to) {
+        if let Err(e) = nfs_platform::fs::rename(json, &to) {
             tracing::warn!(error = %e, path = %json.display(), "career.json could not be set aside");
         }
     };
@@ -1201,17 +1203,19 @@ pub fn write_profile(dir: &Path, profile: &Profile, save: &SaveFile) -> std::io:
     if profile.name.is_empty() {
         return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "SaveInfo refuses the empty name (0x4DEDB9)"));
     }
-    std::fs::create_dir_all(dir)?;
+    nfs_platform::fs::create_dir_all(dir)?;
     // the `TrackRecords` module's side effect (0x4FAD80): `nfs5.trk` is written with every profile save
     if let Err(e) = crate::records::Records::flush_staged() {
         tracing::warn!(error = %e, "records save failed");
     }
-    std::fs::write(profile.path(dir), save.write())?;
+    nfs_platform::fs::write(profile.path(dir), save.write())?;
     write_player_lst(dir, &profile.stem())
 }
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use nfs_platform::PathExt as _;
     use super::*;
 
     /// §4.2: the parts inventory goes out as whole `nfs5.prt` records carrying each spare's own
@@ -1303,31 +1307,31 @@ mod tests {
     #[test]
     fn the_list_is_sorted_by_name_not_by_digit() {
         let dir = std::env::temp_dir().join(format!("nfs5-profiles-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
+        nfs_platform::fs::create_dir_all(&dir).unwrap();
         for stem in ["9Anna", "0Zoe", "4Mike", "XXDefXX"] {
-            std::fs::write(dir.join(format!("{stem}.sav")), []).unwrap();
+            nfs_platform::fs::write(dir.join(format!("{stem}.sav")), []).unwrap();
         }
         let names: Vec<String> = list_profiles(&dir).iter().map(|p| p.name.clone()).collect();
         assert_eq!(names, ["Anna", "Mike", "Zoe"], "the template is hidden and the digit does not order");
         assert!(name_taken(&dir, "Anna"), "the name is taken whatever the digit");
         // 0x4DF090 tests `cFileName`, `.sav` included: 95 + 4 = 99 is listed, 96 + 4 = 100 is not
         let (ok, long) = (format!("1{}", "a".repeat(94)), format!("2{}", "b".repeat(95)));
-        std::fs::write(dir.join(format!("{ok}.sav")), []).unwrap();
-        std::fs::write(dir.join(format!("{long}.sav")), []).unwrap();
+        nfs_platform::fs::write(dir.join(format!("{ok}.sav")), []).unwrap();
+        nfs_platform::fs::write(dir.join(format!("{long}.sav")), []).unwrap();
         let listed = list_profiles(&dir);
         assert!(listed.iter().any(|p| p.stem() == ok));
         assert!(!listed.iter().any(|p| p.stem() == long));
-        std::fs::remove_file(dir.join(format!("{ok}.sav"))).unwrap();
-        std::fs::remove_file(dir.join(format!("{long}.sav"))).unwrap();
+        nfs_platform::fs::remove_file(dir.join(format!("{ok}.sav"))).unwrap();
+        nfs_platform::fs::remove_file(dir.join(format!("{long}.sav"))).unwrap();
         assert!(!name_taken(&dir, "Otto"));
         assert!(name_taken(&dir, ""), "the empty name is rejected");
         assert!(write_profile(&dir, &Profile::new("", 0), &SaveFile::default()).is_err(), "SaveInfo writes no nameless profile");
-        assert!(!dir.join("0.sav").exists());
+        assert!(!dir.join("0.sav").host_exists());
         write_player_lst(&dir, "4Mike").unwrap();
         assert_eq!(read_player_lst(&dir).as_deref(), Some("4Mike"));
         delete_profile(&dir, &Profile::new("Mike", 4)).unwrap();
         assert_eq!(list_profiles(&dir).len(), 2);
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
     }
 }

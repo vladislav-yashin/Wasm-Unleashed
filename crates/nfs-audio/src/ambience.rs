@@ -431,7 +431,7 @@ impl Thunder {
 
 impl Ambience {
     pub fn load(sounds_dir: &Path, scenes: &[&Scene], ambient_level: u8) -> anyhow::Result<Self> {
-        let viv = std::fs::read(sounds_dir.join("track.viv"))?;
+        let viv = nfs_platform::fs::read(sounds_dir.join("track.viv"))?;
         let dir = Bigf::parse(&viv)?;
         let mut index = HashMap::new();
         for e in &dir.entries {
@@ -961,7 +961,7 @@ mod tests {
         let Ok(paths) = nfs_assets::GamePaths::locate() else { return };
         let dir = paths.game_data().join("Track");
         for (file, links) in [("castle_audio.scn", &[294usize, 295, 296, 297][..]), ("forest_audio.scn", &[102][..])] {
-            let Ok(text) = std::fs::read_to_string(dir.join(file)) else { return };
+            let Ok(text) = nfs_platform::fs::read_to_string(dir.join(file)) else { return };
             let scene = Scene::parse(&text).unwrap();
             let mut elements = Element::from_scene(&scene, 0);
             for &l in links {

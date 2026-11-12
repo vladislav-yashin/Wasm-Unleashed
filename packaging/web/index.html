@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>OpenUnleashed</title>
+<link rel="stylesheet" href="style.css">
+<body>
+<section id="loader" role="status">
+<h1>OpenUnleashed</h1>
+<p id="status">Готов к загрузке игры</p>
+<progress id="progress" value="0" max="1"></progress>
+<button id="start">Запустить</button>
+</section>
+<nav id="tools" aria-label="Управление игрой">
+<button id="fullscreen">⛶</button>
+<button id="export">Экспорт сохранений</button>
+<label class="button">Импорт<input id="import" type="file" accept="application/json"></label>
+<span id="save-status" role="status"></span>
+</nav>
+<div id="touch" aria-label="Сенсорное управление">
+<div><button data-code="ArrowLeft" aria-label="Руль влево">◀</button><button data-code="ArrowRight" aria-label="Руль вправо">▶</button></div>
+<div><button data-code="KeyP">Пауза</button><button data-code="KeyC">Камера</button><button data-code="KeyA">+</button><button data-code="KeyZ">−</button></div>
+<div><button data-code="Space">Ручник</button><button data-code="ArrowDown">Тормоз</button><button data-code="ArrowUp">Газ</button></div>
+</div>
+<input id="text-input" aria-label="Ввод имени" placeholder="Имя профиля" maxlength="32" autocomplete="off">
+<script type="module" src="bootstrap.mjs"></script>
+</body></html>

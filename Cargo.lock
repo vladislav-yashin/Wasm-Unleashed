@@ -426,6 +426,8 @@ dependencies = [
  "block2 0.6.2",
  "coreaudio-rs",
  "dasp_sample",
+ "futures-channel",
+ "futures-util",
  "jni",
  "js-sys",
  "libc",
@@ -441,6 +443,8 @@ dependencies = [
  "objc2-core-audio-types",
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
  "windows",
  "windows-core",
@@ -621,6 +625,15 @@ dependencies = [
  "anyhow",
  "nfs-assets",
  "nfs-formats",
+]
+
+[[package]]
+name = "futures-channel"
+version = "0.3.32"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07bbe89c50d7a535e539b8c17bc0b49bdb77747034daa8087407d655f3f7cc1d"
+dependencies = [
+ "futures-core",
 ]
 
 [[package]]
@@ -1104,6 +1117,7 @@ dependencies = [
  "image",
  "nfs-formats",
  "nfs-physics",
+ "nfs-platform",
  "nfs-renderer",
  "thiserror 2.0.21",
  "tracing",
@@ -1118,13 +1132,16 @@ dependencies = [
  "libm",
  "nfs-assets",
  "nfs-formats",
+ "nfs-platform",
  "tracing",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
 name = "nfs-formats"
 version = "0.1.5"
 dependencies = [
+ "nfs-platform",
  "serde",
  "thiserror 2.0.21",
 ]
@@ -1140,6 +1157,7 @@ dependencies = [
  "nfs-formats",
  "nfs-math",
  "nfs-physics",
+ "nfs-platform",
  "nfs-renderer",
  "serde",
  "serde_json",
@@ -1151,8 +1169,11 @@ dependencies = [
 name = "nfs-input"
 version = "0.1.5"
 dependencies = [
+ "nfs-platform",
  "sdl3-sys",
  "tracing",
+ "wasm-bindgen",
+ "web-sys",
  "winit",
 ]
 
@@ -1169,6 +1190,7 @@ name = "nfs-net"
 version = "0.1.5"
 dependencies = [
  "libc",
+ "nfs-platform",
  "thiserror 2.0.21",
  "tracing",
 ]
@@ -1183,12 +1205,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "nfs-platform"
+version = "0.1.5"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-time",
+]
+
+[[package]]
 name = "nfs-renderer"
 version = "0.1.5"
 dependencies = [
  "anyhow",
  "bytemuck",
  "glam",
+ "nfs-platform",
  "pollster",
  "tracing",
  "wgpu",
@@ -1597,6 +1630,7 @@ dependencies = [
  "embed-resource",
  "glam",
  "image",
+ "js-sys",
  "nfs-assets",
  "nfs-audio",
  "nfs-formats",
@@ -1605,11 +1639,15 @@ dependencies = [
  "nfs-math",
  "nfs-net",
  "nfs-physics",
+ "nfs-platform",
  "nfs-renderer",
  "pollster",
  "serde_json",
  "tracing",
  "tracing-subscriber",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
  "wgpu",
  "winit",
 ]
@@ -2741,6 +2779,7 @@ dependencies = [
  "thiserror 2.0.21",
  "wgpu-core-deps-apple",
  "wgpu-core-deps-emscripten",
+ "wgpu-core-deps-wasm",
  "wgpu-core-deps-windows-linux-android",
  "wgpu-hal",
  "wgpu-naga-bridge",
@@ -2761,6 +2800,15 @@ name = "wgpu-core-deps-emscripten"
 version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d98b86cf4abf524a902dd35f18ca6a3f08fc2ae9847c8f10b48e30491b1f0b86"
+dependencies = [
+ "wgpu-hal",
+]
+
+[[package]]
+name = "wgpu-core-deps-wasm"
+version = "30.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d260ca2ca8adc654f513a869bf3cac0b47f5b8d3f87803d6942015f8de597aae"
 dependencies = [
  "wgpu-hal",
 ]

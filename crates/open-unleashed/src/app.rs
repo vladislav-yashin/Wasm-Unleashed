@@ -586,11 +586,11 @@ pub(crate) struct App {
     /// 448, flips straight to hidden. This port blinked on `tick % 96 < 64`.
     pub(crate) wrong_way_blink: (u64, u64, bool),
     /// `--record path`: per-32Hz-tick CSV of controls and vehicle state (regression fixtures)
-    pub(crate) record: Option<std::io::BufWriter<std::fs::File>>,
+    pub(crate) record: Option<std::io::BufWriter<nfs_platform::fs::File>>,
     /// **Test glue** (`NFS_NET_DUMP=<file>`): every human car's state after every tick of an
     /// input-exchange race, one line per car in race-index order, the floats as their bit patterns —
     /// what two machines' runs are diffed on (`network.md` §11.17)
-    pub(crate) net_dump: Option<std::io::BufWriter<std::fs::File>>,
+    pub(crate) net_dump: Option<std::io::BufWriter<nfs_platform::fs::File>>,
     /// when the last tick of an input-exchange race ran (the render's interpolation clock)
     pub(crate) exchange_tick_at: Instant,
     /// **`HInfo`'s in-race box** `[0x60C9C0]` (0x4251D5) — the `hud.loc` text it shows, if it is up
@@ -833,7 +833,7 @@ pub(crate) struct FrontEnd {
     pub(crate) main_music_stamp: i64,
     /// The process clock the 128 Hz `TIMER_getTicks()` counts from (`TIMER_init` at process start,
     /// `frontend-3d.md` §3): this port's App construction stands in for it.
-    pub(crate) timer_origin: std::time::Instant,
+    pub(crate) timer_origin: nfs_platform::time::Instant,
     /// The loading screen's packs (`era0.fsh`, `loadtext.fsh`), made on the first
     /// `fe_loading_frame` — the original frees them at step 9 and reloads them next time.
     pub(crate) loading: Option<nfs_game::layout::loading::LoadingScreen>,

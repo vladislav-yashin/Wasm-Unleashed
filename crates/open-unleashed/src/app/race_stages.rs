@@ -144,7 +144,7 @@ impl App {
         // `<track>.jnc` carries the branch weights the AI's junction choice reads (`race-logic.md` §10)
         let table = SliceTable::from_crp(&self.track.crp, &self.track.crp_data).ok().map(|mut t| {
             if let Some(p) = GamePaths::find_file(&self.track.dir, &format!("{}.jnc", self.track.name))
-                && let Ok(d) = std::fs::read(&p)
+                && let Ok(d) = nfs_platform::fs::read(&p)
                 && !t.apply_jnc(&d)
             {
                 tracing::warn!(path = %p.display(), "junction weights rejected: the file does not match the node count");
@@ -238,7 +238,7 @@ impl App {
                 // `FECar::init`, unconditional) unless a career opponent brings its own
                 let parts_table = self.fe_parts_table();
                 let catalog = nfs_formats::fedata::parse_car_catalog(
-                    &std::fs::read(self.paths.fe_data().join("Data").join("nfs5.car"))
+                    &nfs_platform::fs::read(self.paths.fe_data().join("Data").join("nfs5.car"))
                         .unwrap_or_default(),
                 )
                 .unwrap_or_default();
@@ -697,7 +697,7 @@ impl App {
                 let room = 9u32.saturating_sub(1 + self.num_opponents + cops);
                 let traffic_count = self.road.traffic_count.min(room);
                 if traffic_count > 0 {
-                    let trk = std::fs::read(self.paths.fe_data().join("Data").join("nfs5.trk"))
+                    let trk = nfs_platform::fs::read(self.paths.fe_data().join("Data").join("nfs5.trk"))
                         .ok()
                         .and_then(|d| nfs_formats::career::parse_track_table(&d).ok())
                         .unwrap_or_default();
@@ -867,7 +867,7 @@ impl App {
                         if let Some(p) = GamePaths::find_file(
                             &self.paths.game_data().join("Simulation").join("AI"),
                             "scripts.bin",
-                        ) && let Ok(d) = std::fs::read(&p)
+                        ) && let Ok(d) = nfs_platform::fs::read(&p)
                         {
                             match nfs_formats::scripts::Scripts::parse(&d) {
                                 Ok(sc) => set.scripts = sc,
@@ -908,7 +908,7 @@ impl App {
                     self.road.cop_count = fe0_cops.len() as u32;
                 }
                 if self.road.cops_enabled {
-                    let trk = std::fs::read(self.paths.fe_data().join("Data").join("nfs5.trk"))
+                    let trk = nfs_platform::fs::read(self.paths.fe_data().join("Data").join("nfs5.trk"))
                         .ok()
                         .and_then(|d| nfs_formats::career::parse_track_table(&d).ok())
                         .unwrap_or_default();
@@ -921,7 +921,7 @@ impl App {
                         &self.paths.game_data().join("Track").join("Cops"),
                         &format!("{}.cop", self.track.name),
                     )
-                    .and_then(|p| std::fs::read(p).ok())
+                    .and_then(|p| nfs_platform::fs::read(p).ok())
                     .and_then(|d| {
                         nfs_formats::cop::CopFile::parse(&d)
                             .map_err(|e| tracing::warn!(error = %e, "cop file unreadable"))
@@ -1107,7 +1107,7 @@ impl App {
         // keep the state object's default 0, the lamp glare's object gets 1 (0x43CF5B, additive)
         // `common.fsh` is read and decoded once for all the draws below (each used to decode the whole pack)
         let common = nfs_assets::GamePaths::find_file(&self.paths.render_dir(), "common.fsh")
-            .and_then(|path| std::fs::read(&path).ok().and_then(|data| nfs_assets::texture::decode_pack(&path, &data).ok()));
+            .and_then(|path| nfs_platform::fs::read(&path).ok().and_then(|data| nfs_assets::texture::decode_pack(&path, &data).ok()));
         let sprite = |renderer: &mut Renderer,
                       quad: &nfs_renderer::MeshData,
                       name: &str,
@@ -1182,7 +1182,7 @@ impl App {
         self.skid_pool = (0..160).map(|_| renderer.upload_dynamic_mesh(&skid)).collect();
         // the track flares' definitions and their textures, out of `common.fsh` by the exact
         // name the loader swapped into place (the pack has both `spik` and `SPIK`)
-        self.flare_defs = std::fs::read(self.paths.render_dir().join("flare.dat")).map(|d| nfs_formats::flare::parse(&d)).unwrap_or_default();
+        self.flare_defs = nfs_platform::fs::read(self.paths.render_dir().join("flare.dat")).map(|d| nfs_formats::flare::parse(&d)).unwrap_or_default();
         self.flare_sprites.clear();
         self.sun_sprites.clear();
         self.lens_sprites.clear();
@@ -1285,13 +1285,13 @@ impl App {
         // the track's particle systems, started by its kind-3 `ef` parts (`particles.md` §6); their
         // budget `[0x6197E0]` is set at 0x44ED10 by `SPECIALFX` `[0x657D6C]` (the registry record
         // 0x4B1284: slot 0x47): 0 → 0, 1 → 100, 2 → 200, else 256 (0x44EDEA…0x44EECC)
-        let defs = std::fs::read(self.paths.render_dir().join("particle.dat")).map(|d| nfs_formats::particle_dat::parse(&d)).unwrap_or_default();
+        let defs = nfs_platform::fs::read(self.paths.render_dir().join("particle.dat")).map(|d| nfs_formats::particle_dat::parse(&d)).unwrap_or_default();
         // 0x455570 then loads `carpart.dat` the same way into the same map — the cars' own nine
         // systems (`particles.md` §11), with their textures in the same `particle.fsh`
-        let car_defs = std::fs::read(self.paths.render_dir().join("carpart.dat")).map(|d| nfs_formats::particle_dat::parse(&d)).unwrap_or_default();
+        let car_defs = nfs_platform::fs::read(self.paths.render_dir().join("carpart.dat")).map(|d| nfs_formats::particle_dat::parse(&d)).unwrap_or_default();
         self.track_particle_sprites.clear();
         if let Some(path) = nfs_assets::GamePaths::find_file(&self.paths.render_dir(), "particle.fsh")
-            && let Ok(data) = std::fs::read(&path)
+            && let Ok(data) = nfs_platform::fs::read(&path)
             && let Ok(images) = nfs_assets::texture::decode_pack(&path, &data)
         {
             // one material per texture and blend: the definition's `+0x28` is the draw's Thrash

@@ -6,6 +6,7 @@ license.workspace = true
 description = "The network protocol of Need for Speed: Porsche Unleashed"
 
 [dependencies]
+nfs-platform.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 

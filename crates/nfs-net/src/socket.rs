@@ -24,7 +24,7 @@ pub struct CommSocket {
     /// sends (`S`) or receives (`R`) as `<seconds> <S|R> <own port> <peer> <hex>` — the port's side of
     /// a wire comparison against a tcpdump of the original (`network.md` §7.19; no tcpdump without
     /// root on the Mac).
-    dump: Option<std::cell::RefCell<std::fs::File>>,
+    dump: Option<std::cell::RefCell<nfs_platform::fs::File>>,
 }
 
 impl CommSocket {
@@ -49,7 +49,7 @@ impl CommSocket {
             dropped: std::cell::Cell::new(0),
             dump: std::env::var("NFS_NET_DUMP")
                 .ok()
-                .and_then(|p| std::fs::OpenOptions::new().create(true).append(true).open(p).ok())
+                .and_then(|p| nfs_platform::fs::OpenOptions::new().create(true).append(true).open(p).ok())
                 .map(std::cell::RefCell::new),
         })
     }
@@ -57,7 +57,7 @@ impl CommSocket {
     fn dump_line(&self, dir: char, peer: SocketAddr, bytes: &[u8]) {
         use std::io::Write;
         if let Some(f) = &self.dump {
-            let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
+            let t = nfs_platform::time::SystemTime::now().duration_since(nfs_platform::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
             let port = self.sock.local_addr().map(|a| a.port()).unwrap_or(0);
             let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
             let _ = writeln!(f.borrow_mut(), "{t:.6} {dir} {port} {peer} {hex}");
@@ -352,7 +352,7 @@ mod tests {
             if let Some(x) = s.recv().unwrap() {
                 return x;
             }
-            std::thread::sleep(std::time::Duration::from_millis(2));
+            std::thread::sleep(nfs_platform::time::Duration::from_millis(2));
         }
         panic!("nothing arrived");
     }

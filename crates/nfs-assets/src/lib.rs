@@ -28,7 +28,7 @@ pub enum AssetError {
 }
 
 pub(crate) fn read(path: &std::path::Path) -> Result<Vec<u8>, AssetError> {
-    std::fs::read(path).map_err(|source| AssetError::Io { path: path.to_path_buf(), source })
+    nfs_platform::fs::read(path).map_err(|source| AssetError::Io { path: path.to_path_buf(), source })
 }
 
 /// Read a game file and unpack it when it is a RefPack stream — the pair of lines every loader

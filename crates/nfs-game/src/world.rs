@@ -1502,7 +1502,7 @@ pub fn sky_planes(origin: Vec3, centre: Vec3, lateral: Vec3, forward: Vec3, text
 /// 0.05 — finds no texture (0x44D36D) in either mode and draws no specular pass.
 pub fn car_specular_maps(r: &mut Renderer, paths: &nfs_assets::GamePaths, front_end: bool) -> [Option<nfs_renderer::TextureId>; 3] {
     let path = paths.car_model_dir().join("carcmn.fsh");
-    let Ok(data) = std::fs::read(&path) else {
+    let Ok(data) = nfs_platform::fs::read(&path) else {
         return [None; 3];
     };
     let Ok(pack) = nfs_assets::texture::decode_pack(&path, &data) else {

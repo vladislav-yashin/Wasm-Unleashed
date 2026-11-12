@@ -18,6 +18,8 @@
 //! files); `NFS_GUARD=1` forces it for a test, `NFS_GUARD=0` turns it off. With `NFS5_SAVE_DIR` set the files sit
 //! beside it, as the log does.
 
+#[allow(unused_imports)]
+use nfs_platform::PathExt as _;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -27,6 +29,7 @@ const CONFIRM_SECS: u64 = 30;
 static SAFE: AtomicBool = AtomicBool::new(false);
 
 fn enabled() -> bool {
+    if cfg!(target_arch = "wasm32") { return false; }
     match std::env::var("NFS_GUARD").ok().as_deref() {
         Some("0") => false,
         Some(_) => true,
@@ -48,14 +51,14 @@ pub fn begin() {
         return;
     }
     let d = dir();
-    let _ = std::fs::create_dir_all(&d);
+    let _ = nfs_platform::fs::create_dir_all(&d);
     let guard = d.join("startup.guard");
     let flag = d.join("gpu-safe.flag");
-    if guard.exists() {
+    if guard.host_exists() {
         tracing::warn!("the previous start did not finish (a crash?): safe mode for this start");
-        let _ = std::fs::write(&flag, b"the previous start did not finish; this start asks for a plain GPU device\n");
+        let _ = nfs_platform::fs::write(&flag, b"the previous start did not finish; this start asks for a plain GPU device\n");
     }
-    let safe = flag.exists();
+    let safe = flag.host_exists();
     SAFE.store(safe, Ordering::Relaxed);
     if safe {
         // SAFETY: start-up, before any GPU / audio thread reads these variables
@@ -69,14 +72,14 @@ pub fn begin() {
         }
         tracing::warn!(flag = %flag.display(), "safe mode: a plain GPU device (no optional features){} for this start; the flag is dropped once it survives", if cfg!(windows) { ", Direct3D 12" } else { "" });
     }
-    let _ = std::fs::write(&guard, b"start in progress\n");
+    let _ = nfs_platform::fs::write(&guard, b"start in progress\n");
     std::thread::Builder::new()
         .name("start-guard".into())
         .spawn(move || {
-            std::thread::sleep(std::time::Duration::from_secs(CONFIRM_SECS));
-            let _ = std::fs::remove_file(&guard);
+            std::thread::sleep(nfs_platform::time::Duration::from_secs(CONFIRM_SECS));
+            let _ = nfs_platform::fs::remove_file(&guard);
             if SAFE.swap(false, Ordering::Relaxed) {
-                let _ = std::fs::remove_file(&flag);
+                let _ = nfs_platform::fs::remove_file(&flag);
                 tracing::info!("safe start survived: the next start tries the normal path again");
             }
         })
@@ -87,9 +90,9 @@ pub fn begin() {
 pub fn end() {
     if enabled() {
         let d = dir();
-        let _ = std::fs::remove_file(d.join("startup.guard"));
+        let _ = nfs_platform::fs::remove_file(d.join("startup.guard"));
         if SAFE.swap(false, Ordering::Relaxed) {
-            let _ = std::fs::remove_file(d.join("gpu-safe.flag"));
+            let _ = nfs_platform::fs::remove_file(d.join("gpu-safe.flag"));
         }
     }
 }

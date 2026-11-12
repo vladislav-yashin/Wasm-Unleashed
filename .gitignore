@@ -18,3 +18,7 @@
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Browser distribution and private original game resources
+/dist/
+/web-data/

@@ -543,7 +543,7 @@ fn mix_block_timing() {
         out.play_word_sel(looped.clone(), 0.5, 4096 + i * 40, 0x40, 0x2000, true, 0x7F);
     }
     let mut buf = vec![0.0f32; 882];
-    let t = std::time::Instant::now();
+    let t = nfs_platform::time::Instant::now();
     let mut h = 0xcbf2_9ce4_8422_2325u64;
     for _ in 0..250 {
         core.drain();

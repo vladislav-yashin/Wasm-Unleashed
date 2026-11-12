@@ -1,5 +1,7 @@
 //! Locate the (read-only) original game installation. See `docs/en/game-data.md`.
 
+#[allow(unused_imports)]
+use nfs_platform::PathExt as _;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
@@ -17,6 +19,10 @@ impl GamePaths {
     /// Resolve the game root: `$NFS5_GAME_PATH`, then `game/` beside the executable, an app bundle's own
     /// `Resources/game`, then the documented default locations ([`crate::platform::game_data_candidates`]).
     pub fn locate() -> Result<Self, GameNotFound> {
+        #[cfg(target_arch = "wasm32")]
+        return Ok(Self { root: PathBuf::from("/game") });
+        #[cfg(not(target_arch = "wasm32"))]
+        {
         let mut tried = Vec::new();
         if let Ok(p) = std::env::var("NFS5_GAME_PATH") {
             let p = PathBuf::from(p);
@@ -34,10 +40,11 @@ impl GamePaths {
             tried.push(p);
         }
         Err(GameNotFound { tried })
+        }
     }
 
     fn looks_like_root(p: &Path) -> bool {
-        p.join("GameData").is_dir() && p.join("FEData").is_dir()
+        p.join("GameData").host_is_dir() && p.join("FEData").host_is_dir()
     }
 
     pub fn game_data(&self) -> PathBuf {
@@ -67,7 +74,7 @@ impl GamePaths {
         let mut out = nfs_formats::regfile::RegFile::default();
         let dirs = [self.root.parent().map(|p| p.join("regs")), Some(self.root.join("regs"))];
         for dir in dirs.into_iter().flatten() {
-            let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+            let Ok(rd) = nfs_platform::fs::read_dir(&dir) else { continue };
             let mut files: Vec<PathBuf> = rd
                 .flatten()
                 .map(|e| e.path())
@@ -75,7 +82,7 @@ impl GamePaths {
                 .collect();
             files.sort();
             for f in files {
-                if let Ok(b) = std::fs::read(&f) {
+                if let Ok(b) = nfs_platform::fs::read(&f) {
                     out.merge(nfs_formats::regfile::RegFile::parse(&b));
                 }
             }
@@ -115,6 +122,8 @@ impl GamePaths {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use nfs_platform::PathExt as _;
     use super::*;
 
     /// This install's `game_info/regs/reg.reg` holds `"Language"="English"` under the game's key.
@@ -122,7 +131,7 @@ mod tests {
     fn the_install_registry_language() {
         let Ok(p) = GamePaths::locate() else { return };
         let reg = p.registry();
-        if p.root.parent().is_some_and(|d| d.join("regs").join("reg.reg").is_file()) {
+        if p.root.parent().is_some_and(|d| d.join("regs").join("reg.reg").host_is_file()) {
             let v = reg.value(nfs_formats::regfile::GAME_KEY, "Language");
             assert_eq!(v, Some(&nfs_formats::regfile::RegValue::Sz("English".into())));
         }

@@ -92,7 +92,12 @@ pub(crate) struct Cli {
 impl Cli {
     /// The process's own arguments, the program name skipped.
     pub(crate) fn from_env() -> Self {
-        Self::parse(&std::env::args().skip(1).collect::<Vec<_>>())
+        {
+            #[cfg(target_arch = "wasm32")]
+            return Self::parse(&[]);
+            #[cfg(not(target_arch = "wasm32"))]
+            Self::parse(&std::env::args().skip(1).collect::<Vec<_>>())
+        }
     }
 
     pub(crate) fn parse(args: &[String]) -> Self {

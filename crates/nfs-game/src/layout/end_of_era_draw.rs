@@ -44,7 +44,7 @@ impl LayoutScreen {
                 continue;
             }
             let entries: Vec<Art> = GamePaths::find_file(&dir, name)
-                .and_then(|p| std::fs::read(&p).ok().map(|d| (p, d)))
+                .and_then(|p| nfs_platform::fs::read(&p).ok().map(|d| (p, d)))
                 .and_then(|(p, d)| decode_pack(&p, &d).ok())
                 .unwrap_or_default()
                 .into_iter()
@@ -57,7 +57,7 @@ impl LayoutScreen {
             art.insert(name, entries);
         }
         let font = GamePaths::find_file(&dir, eoe::FONT)
-            .and_then(|p| std::fs::read(&p).ok())
+            .and_then(|p| nfs_platform::fs::read(&p).ok())
             .and_then(|d| nfs_formats::fnt::Font::parse(&d).ok())
             .map(|f| BitmapFont::upload(r, f));
         // 0x4FEC8E: `(0, 0, 416, 348, audio 1)` — the show's own movie carries a sound flag, so

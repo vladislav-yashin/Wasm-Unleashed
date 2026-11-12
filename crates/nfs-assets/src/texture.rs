@@ -182,7 +182,7 @@ fn decode_pack_levels(path: &Path, data: &[u8], pick: impl Fn(u32, u32) -> u32 +
     let chunk = n.div_ceil(workers);
     let decode_entry = &decode_entry;
     // PORT-DEVIATION D7 (RE/notes/PORT-DEVIATIONS.md): a big pack decodes on worker threads, joined in file order; the original loads sequentially (load steps 0x4A4A70).
-    std::thread::scope(|s| {
+    nfs_platform::thread::scope(|s| {
         let handles: Vec<_> = (0..n)
             .step_by(chunk)
             .map(|lo| s.spawn(move || (lo..(lo + chunk).min(n)).map(decode_entry).collect::<Result<Vec<_>, _>>()))

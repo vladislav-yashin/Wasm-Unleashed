@@ -193,7 +193,7 @@ impl App {
             .filter_map(|e| e.split_once('@'))
             .filter_map(|(f, t)| Some((f.trim().parse().ok()?, t.trim().to_string())))
             .collect();
-        let _ = std::fs::create_dir_all(&dir);
+        let _ = nfs_platform::fs::create_dir_all(&dir);
         let (w, h) = (shot_geometry().0, shot_geometry().1);
         for f in 0..frames {
             for (_, tok) in events.iter().filter(|(ef, _)| *ef == f) {

@@ -39,7 +39,7 @@ impl FeSfx {
     pub fn load(sounds_dir: &Path, audio_quality: u8) -> anyhow::Result<Self> {
         let name = if audio_quality > 1 { "lilfesfx.bnk" } else { "fesfx.bnk" };
         let path = sounds_dir.join(name);
-        let data = std::fs::read(&path).map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
+        let data = nfs_platform::fs::read(&path).map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
         let bank = Bnk::parse(&data)?;
         tracing::info!(slots = bank.slot_count(), name, "front-end sound bank loaded");
         let trim = nfs_formats::spl::GameSpl::load(sounds_dir).fe_sfx();

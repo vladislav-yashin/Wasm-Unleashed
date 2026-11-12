@@ -8,7 +8,15 @@
 //! physics'.
 
 pub mod bindings;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod ff;
+#[cfg(target_arch = "wasm32")]
+#[path = "web_ff.rs"]
+pub mod ff;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod gamepad;
+#[cfg(target_arch = "wasm32")]
+#[path = "web_gamepad.rs"]
 pub mod gamepad;
 
 use std::collections::HashSet;

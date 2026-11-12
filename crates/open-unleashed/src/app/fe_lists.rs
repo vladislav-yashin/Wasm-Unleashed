@@ -48,7 +48,7 @@ impl App {
         }
         let dir = self.paths.fe_data().join("Locale");
         let path = GamePaths::find_file(&dir, &format!("{key}.loc"))?;
-        let d = std::fs::read(path).ok()?;
+        let d = nfs_platform::fs::read(path).ok()?;
         // the language is 0x4B73F0's, set on the file at 0x508C78 (`App::language`); block 0 of
         // the car files is English in this install
         let lang = usize::from(self.language);
@@ -454,7 +454,7 @@ mod catalogue_order_tests {
     #[test]
     fn the_exchange_sort_matches_the_original_instruction_for_instruction() {
         let Ok(paths) = GamePaths::locate() else { return };
-        let Ok(bytes) = std::fs::read(paths.fe_data().join("Data").join("nfs5.car")) else { return };
+        let Ok(bytes) = nfs_platform::fs::read(paths.fe_data().join("Data").join("nfs5.car")) else { return };
         let Ok(catalog) = nfs_formats::fedata::parse_car_catalog(&bytes) else { return };
         let mut cars: Vec<_> = catalog.into_iter().filter(|c| c.kind == 0).collect();
         era_class_year_sort(&mut cars, era_class_year_key);
@@ -574,7 +574,7 @@ mod dealer_flag_tests {
     #[test]
     fn quickrace_catalogue_against_the_shipped_file() {
         let Ok(paths) = GamePaths::locate() else { return };
-        let Ok(bytes) = std::fs::read(paths.fe_data().join("Data").join("nfs5.car")) else { return };
+        let Ok(bytes) = nfs_platform::fs::read(paths.fe_data().join("Data").join("nfs5.car")) else { return };
         let Ok(catalog) = nfs_formats::fedata::parse_car_catalog(&bytes) else { return };
         let cars = generic_car_list(&catalog, 0);
         assert_eq!(cars.len(), 15);

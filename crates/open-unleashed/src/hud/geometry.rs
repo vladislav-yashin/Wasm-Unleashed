@@ -21,7 +21,7 @@ impl Hud {
                         entry: Option<&str>|
          -> Option<(TextureId, f32, f32)> {
             let p = GamePaths::find_file(&dir, file)?;
-            let d = std::fs::read(p).ok()?;
+            let d = nfs_platform::fs::read(p).ok()?;
             let f = nfs_formats::fsh::Fsh::parse(&d).ok()?;
             let i = match (index, entry) {
                 (Some(i), _) if i < f.entries.len() => i,
@@ -101,7 +101,7 @@ impl Hud {
             .map(|(a, b)| (a.0, b.0));
         let mut load_font = |name: &str| {
             GamePaths::find_file(&dir, name)
-                .and_then(|p| std::fs::read(p).ok())
+                .and_then(|p| nfs_platform::fs::read(p).ok())
                 .and_then(|d| nfs_formats::fnt::Font::parse(&d).ok())
                 .map(|f| BitmapFont::upload(r, f))
         };

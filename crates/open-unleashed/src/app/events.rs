@@ -253,7 +253,7 @@ impl App {
             // clock is the wall clock's milliseconds — PORT-DEVIATION D20 for the time since
             // Windows started
             let rng = &mut self.fe_rng;
-            let ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u32);
+            let ms = nfs_platform::time::SystemTime::now().duration_since(nfs_platform::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u32);
             m.toggle(a, &mut || rng.next_u32().wrapping_add(ms));
             tracing::info!(playing = ?m.now_playing(), "I_MUSIC (0x4AD790)");
         }
@@ -261,6 +261,25 @@ impl App {
 }
 
 impl ApplicationHandler for App {
+    #[cfg(target_arch = "wasm32")]
+    fn new_events(&mut self, event_loop: &ActiveEventLoop, _: winit::event::StartCause) {
+        crate::web::report_state(if self.intro.is_some() { "intro" } else if self.window.is_none() { "boot" } else if self.vehicle.is_some() { "race" } else { "menu" }, self.paused, self.vehicle.as_ref().map_or(0.0, |v| v.speed()));
+        if let Some(window) = &self.window { crate::web::resize(window); }
+        else if let Some(intro) = &self.intro { crate::web::resize(&intro.window); }
+        if crate::web::take_race_retry() { self.start_from_layout(event_loop); if let Some(window) = &self.window { window.request_redraw(); } }
+        if let Some(text) = crate::web::take_text() {
+            if let Some((dialog, _)) = self.fe.dialog.as_mut() {
+                if let Some(field) = dialog.field.as_mut() { field.text.clear(); }
+                text.chars().for_each(|c| { dialog.type_char(c); });
+            } else if let Some(index) = self.fe.layout_preview.as_ref().and_then(|layout| layout.focused_input()) {
+                if let Some(layout) = self.fe.layout_preview.as_mut() { while layout.backspace(index) {} }
+                for c in text.chars() { self.fe_input_key(index, c); }
+                if let Some(layout) = self.fe.layout_preview.as_mut() { let _ = layout.commit_input(index); }
+            }
+        }
+        if crate::web::renderer_ready() { self.resume_inner(event_loop); }
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         // `self.window` stays `None` for as long as the intro plays (`resume_inner`'s intro branch
         // returns before setting it) — a second `resumed` (winit's own contract allows more than
@@ -291,6 +310,22 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        #[cfg(target_arch = "wasm32")]
+        if crate::web::loading() && matches!(event, WindowEvent::KeyboardInput {..} | WindowEvent::MouseInput {..} | WindowEvent::Touch(_)) { return; }
+        #[cfg(target_arch = "wasm32")]
+        if matches!(event, WindowEvent::KeyboardInput { .. } | WindowEvent::MouseInput { .. } | WindowEvent::Touch(_)) {
+            if let Some(audio) = &self.snd.audio { audio.resume_browser(); }
+        }
+        #[cfg(target_arch = "wasm32")]
+        if let WindowEvent::Touch(touch) = &event {
+            if (self.vehicle.is_none() || self.paused) && crate::web::primary_touch(touch) {
+                self.window_event(event_loop, _id, WindowEvent::CursorMoved { device_id: touch.device_id, position: touch.location });
+                if touch.phase != winit::event::TouchPhase::Moved {
+                    self.window_event(event_loop, _id, WindowEvent::MouseInput { device_id: touch.device_id, state: if touch.phase == winit::event::TouchPhase::Started { ElementState::Pressed } else { ElementState::Released }, button: winit::event::MouseButton::Left });
+                }
+            }
+            return;
+        }
         self.net_leaving_step();
         if self.idle_movie_due && self.intro.is_none() {
             self.start_idle_movie();
@@ -336,7 +371,10 @@ impl ApplicationHandler for App {
             // clears nothing (0x53B07F..0x53B0CC only re-hooks the Windows key); the port clears again there
             // because macOS (Cmd+Shift+5 overlay) can hand back a synthetic press for a key whose release was
             // swallowed — PORT-DEVIATION D17 (remainder, FOCUS-INPUT).
-            WindowEvent::Focused(_) => {
+            WindowEvent::Focused(focused) => {
+                #[cfg(target_arch = "wasm32")]
+                if !focused && self.vehicle.is_some() { self.paused = true; }
+                let _ = focused;
                 self.input.release_all();
                 // PORT-DEVIATION D46: photo mode's own held keys too
                 self.photo_release_keys();

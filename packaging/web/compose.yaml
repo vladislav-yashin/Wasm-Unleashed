@@ -1,0 +1,10 @@
+services:
+  game:
+    build:
+      context: ../..
+      dockerfile: packaging/web/Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ${NFS_WEB_DATA:-../../web-data}:/usr/share/nginx/html/data:ro
+    restart: unless-stopped

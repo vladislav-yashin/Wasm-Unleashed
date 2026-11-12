@@ -22,7 +22,7 @@ pub const MAX_PAYLOAD: usize = MAX_DATAGRAM - 1;
 pub const PACKET_BUFFER: usize = 0x144 - 0x28;
 
 /// `select` timeout of the receiver thread, `tv_usec = 0x61A8` at 0x587412.
-pub const RECV_POLL: std::time::Duration = std::time::Duration::from_micros(0x61A8);
+pub const RECV_POLL: nfs_platform::time::Duration = nfs_platform::time::Duration::from_micros(0x61A8);
 
 /// Packets per pool, and there are two pools — 0x587780 and 0x5877AC.
 pub const POOL_PACKETS: usize = 8;

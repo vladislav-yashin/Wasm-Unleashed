@@ -173,7 +173,7 @@ impl App {
                     m.fit_ko();
                     // CRT `rand`'s state is the process's (seed 1 until the first race's `srand(time)`,
                     // 0x418100); the port seeds from the clock — the same unobservability, the draws are the original's
-                    let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u32).unwrap_or(1);
+                    let seed = nfs_platform::time::SystemTime::now().duration_since(nfs_platform::time::UNIX_EPOCH).map(|d| d.as_nanos() as u32).unwrap_or(1);
                     m.randomize_knockout(&mut nfs_game::movie_overlay::CRand::new(seed));
                     self.bind_lists();
                     return;

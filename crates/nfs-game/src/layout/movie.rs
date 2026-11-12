@@ -88,7 +88,7 @@ impl MoviePlayer {
     /// off (`self.snd.audio.is_none()` in the port) — checked again every `advance`.
     pub(super) fn open(r: &mut Renderer, paths: &GamePaths, dir: &str, file: &str, audio: bool) -> Option<Self> {
         let path = GamePaths::find_file(&paths.fe_data().join(dir), file)?;
-        let Ok(data) = std::fs::read(&path) else { return None };
+        let Ok(data) = nfs_platform::fs::read(&path) else { return None };
         let tables = nfs_formats::mad::MadTables::load(&paths.root).ok()?;
         let chunks: Vec<(usize, usize)> = {
             let mut at = 0usize;

@@ -123,8 +123,11 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(window: Arc<Window>) -> Result<Self> {
-        let core = Core::new(window)?;
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn new(window: Arc<Window>) -> Result<Self> { pollster::block_on(Self::new_async(window)) }
+
+    pub async fn new_async(window: Arc<Window>) -> Result<Self> {
+        let core = Core::new_async(window).await?;
         let size = core.size();
         let meshes = core.mesh_infos().into_iter().map(|(vertex_len, writes)| MeshMirror { vertex_len, writes }).collect();
         Ok(Self {
@@ -147,6 +150,10 @@ impl Renderer {
 
     /// Move the encode / submit / present of every frame to a render thread of its own. From here
     /// [`Self::render`] hands the frame over and returns; the pixels drawn for a scene are the same.
+    #[cfg(target_arch = "wasm32")]
+    pub fn enable_render_thread(&mut self) {}
+
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn enable_render_thread(&mut self) {
         if self.worker.is_some() {
             return;

@@ -133,7 +133,7 @@ pub struct Speech {
 impl Speech {
     /// Open the speech archive; banks are decoded the first time they are requested.
     pub fn load(speech_dir: &Path) -> anyhow::Result<Self> {
-        let data = std::fs::read(speech_dir.join("zzzxeng.viv"))?;
+        let data = nfs_platform::fs::read(speech_dir.join("zzzxeng.viv"))?;
         let viv = Bigf::parse(&data)?;
         let spl = nfs_formats::spl::GameSpl::load(&speech_dir.join("..").join("Sounds"));
         let names = viv.get(&data, "oneshots.txt").map(|t| oneshot_names(&String::from_utf8_lossy(t))).unwrap_or_default();

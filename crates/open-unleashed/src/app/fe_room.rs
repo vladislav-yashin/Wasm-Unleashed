@@ -568,7 +568,7 @@ impl App {
         if self.fe.blob_shadow.is_none()
             && let Some(r) = self.renderer.as_mut()
             && let Some(path) = nfs_assets::GamePaths::find_file(&self.paths.render_dir(), "common.fsh")
-            && let Ok(data) = std::fs::read(&path)
+            && let Ok(data) = nfs_platform::fs::read(&path)
             && let Ok(images) = nfs_assets::texture::decode_pack(&path, &data)
             && let Some(img) = images.iter().find(|t| t.name.trim() == "SHAD")
         {
@@ -607,7 +607,7 @@ impl App {
             let now = self.fe.ms;
             if self.fe.victory_movie.is_none()
                 && let Some(path) = nfs_assets::GamePaths::find_file(&self.paths.fe_data().join("Movies"), nfs_game::room::VICTORY_MOVIE)
-                && let Ok(data) = std::fs::read(&path)
+                && let Ok(data) = nfs_platform::fs::read(&path)
                 && let Ok(tables) = nfs_formats::mad::MadTables::load(&self.paths.root)
                 && let Some(m) = nfs_game::room::VictoryMovie::open(tables, data)
             {
@@ -665,7 +665,7 @@ impl App {
                 && self.fe.garage_shadow_tex.is_none()
                 && let Some(r) = self.renderer.as_mut()
                 && let Some(path) = nfs_assets::GamePaths::find_file(&self.paths.render_dir(), "common.fsh")
-                && let Ok(data) = std::fs::read(&path)
+                && let Ok(data) = nfs_platform::fs::read(&path)
                 && let Ok(images) = nfs_assets::texture::decode_pack(&path, &data)
                 && let Some(img) = images.iter().find(|t| t.name.trim() == "FESH")
             {
@@ -991,7 +991,7 @@ impl App {
         };
         let paths = &self.paths;
         let table = self.fe.trk_table.get_or_insert_with(|| {
-            std::fs::read(paths.fe_data().join("Data").join("nfs5.trk")).ok().and_then(|d| nfs_formats::career::parse_track_table(&d).ok()).unwrap_or_default()
+            nfs_platform::fs::read(paths.fe_data().join("Data").join("nfs5.trk")).ok().and_then(|d| nfs_formats::career::parse_track_table(&d).ok()).unwrap_or_default()
         });
         Some((table.iter().find(|t| t.file.eq_ignore_ascii_case(&file))?.clone(), rev, mir))
     }
@@ -1036,11 +1036,11 @@ impl App {
             if self.fe.track_art.as_ref().is_none_or(|(a, _)| !a.eq_ignore_ascii_case(&info.art)) {
                 let dir = self.paths.fe_data().join("TrackArt");
                 let want = format!("{}.fsh", info.art);
-                let file = std::fs::read_dir(&dir)
+                let file = nfs_platform::fs::read_dir(&dir)
                     .ok()
                     .and_then(|d| d.flatten().map(|e| e.path()).find(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.eq_ignore_ascii_case(&want))));
                 let entries = file
-                    .and_then(|p| std::fs::read(p).ok())
+                    .and_then(|p| nfs_platform::fs::read(p).ok())
                     .and_then(|data| {
                         let f = nfs_formats::fsh::Fsh::parse(&data).ok()?;
                         Some((0..f.entries.len()).filter_map(|i| Some((f.decode(&data, i).ok()?, f.entries[i].blocks.first()?.misc))).collect::<Vec<_>>())

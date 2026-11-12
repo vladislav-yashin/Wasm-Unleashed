@@ -97,7 +97,7 @@ impl CareerTables {
         let dir = paths.fe_data().join("Data");
         let read = |name: &'static str| -> Result<Vec<u8>, CareerError> {
             let path = dir.join(name);
-            std::fs::read(&path).map_err(|source| CareerError::Io { path, source })
+            nfs_platform::fs::read(&path).map_err(|source| CareerError::Io { path, source })
         };
         let tbl = |file: &'static str| move |source| CareerError::Table { file, source };
         // the same table the front end reads: `FEStrings.loc` in the current language
@@ -922,7 +922,7 @@ impl Career {
             #[serde(default)]
             promotions_accepted: Vec<i16>,
         }
-        let data = std::fs::read(path).map_err(|source| CareerError::Io { path: path.to_path_buf(), source })?;
+        let data = nfs_platform::fs::read(path).map_err(|source| CareerError::Io { path: path.to_path_buf(), source })?;
         let c: Career = serde_json::from_slice(&data).map_err(|source| CareerError::Json { path: path.to_path_buf(), source })?;
         if c.version > SAVE_VERSION {
             return Err(CareerError::SaveVersion { found: c.version, supported: SAVE_VERSION });
@@ -2152,7 +2152,7 @@ pub fn used_car_trim(paint_sets: usize, interiors: usize, package_count: u32, ra
 /// [`CareerTables::package_count`]): the key's value, 1 when the section lacks it, 0 when there is
 /// no file or no `[header]` (0x443A5C / 0x443A76 jump past the store).
 pub fn package_count(dir: &Path) -> u32 {
-    let Some(text) = GamePaths::find_file(dir, "packages.ini").and_then(|p| std::fs::read_to_string(p).ok()) else { return 0 };
+    let Some(text) = GamePaths::find_file(dir, "packages.ini").and_then(|p| nfs_platform::fs::read_to_string(p).ok()) else { return 0 };
     let ini = nfs_formats::ini::Ini::parse(&text);
     // 0x523AD0: `atoi` of the value, or the default 1 the caller pushes (0x443A7C)
     ini.section("header").map_or(0, |h| h.get("count").map_or(1, |v| v.trim().parse::<i64>().unwrap_or(0).max(0) as u32))
@@ -3119,15 +3119,15 @@ mod tests {
     #[test]
     fn package_count_reads_the_header() {
         let dir = std::env::temp_dir().join(format!("nfs-packages-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        nfs_platform::fs::create_dir_all(&dir).unwrap();
         assert_eq!(package_count(&dir), 0);
-        std::fs::write(dir.join("packages.ini"), "[header]\r\ncount=8\r\n\r\n[package1]\r\n").unwrap();
+        nfs_platform::fs::write(dir.join("packages.ini"), "[header]\r\ncount=8\r\n\r\n[package1]\r\n").unwrap();
         assert_eq!(package_count(&dir), 8);
-        std::fs::write(dir.join("packages.ini"), "[header]\r\n[package1]\r\n").unwrap();
+        nfs_platform::fs::write(dir.join("packages.ini"), "[header]\r\n[package1]\r\n").unwrap();
         assert_eq!(package_count(&dir), 1);
-        std::fs::write(dir.join("packages.ini"), "[package1]\r\n").unwrap();
+        nfs_platform::fs::write(dir.join("packages.ini"), "[package1]\r\n").unwrap();
         assert_eq!(package_count(&dir), 0);
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = nfs_platform::fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -3163,13 +3163,13 @@ mod tests {
         v["tournaments"]["9"]["prize"] = serde_json::json!(5000);
         v["tournaments"]["9"]["failed_attempts"] = serde_json::json!(1);
         let dir = std::env::temp_dir().join(format!("nfs-career-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        nfs_platform::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("career.json");
-        std::fs::write(&path, serde_json::to_vec(&v).unwrap()).unwrap();
+        nfs_platform::fs::write(&path, serde_json::to_vec(&v).unwrap()).unwrap();
         let (back, stages) = Career::read_legacy_json(&path).unwrap();
         assert_eq!(back, c);
         assert_eq!(stages, vec![1, 2]);
-        let _ = std::fs::remove_dir_all(dir);
+        let _ = nfs_platform::fs::remove_dir_all(dir);
     }
 
     #[test]

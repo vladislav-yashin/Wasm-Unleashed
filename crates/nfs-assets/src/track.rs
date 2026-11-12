@@ -2,6 +2,8 @@
 //! converted to meshes (mesh conversion lands once the CRP geometry layout is established —
 //! see `RE/notes/crp-geometry.md`).
 
+#[allow(unused_imports)]
+use nfs_platform::PathExt as _;
 use crate::{fmt_err, read, read_pack, texture::{decode_pack, decode_pack_mipped, TextureImage}, AssetError, GamePaths};
 use crate::mesh::{article_parts, MaterialMesh};
 use nfs_formats::bytes::{get_u32, read_i32, read_u32};
@@ -195,7 +197,7 @@ pub fn uv_light_methods(crp: &Crp, data: &[u8]) -> std::collections::HashSet<Str
 /// `GameData/Render/night.psh`'s one entry, `nght` — 128 × 128 bytes the headlight projector
 /// 0x452910 indexes directly, read at `entry + 0x10` (0x45261B).
 pub fn night_map(paths: &crate::GamePaths) -> Option<Vec<u8>> {
-    let d = std::fs::read(crate::GamePaths::find_file(&paths.render_dir(), "night.psh")?).ok()?;
+    let d = nfs_platform::fs::read(crate::GamePaths::find_file(&paths.render_dir(), "night.psh")?).ok()?;
     if d.get(0..4)? != b"SHPP" {
         return None;
     }
@@ -299,7 +301,7 @@ pub fn geom_scale(e: &nfs_formats::scn::SceneElement) -> glam::Vec3 {
 }
 
 /// The thread's result; a worker that panicked panics here too, as the sequential load would have.
-fn join_scoped<T>(h: std::thread::ScopedJoinHandle<'_, T>) -> T {
+fn join_scoped<T>(h: nfs_platform::thread::ScopedJoinHandle<'_, T>) -> T {
     h.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic))
 }
 
@@ -318,12 +320,12 @@ impl DirLookup {
 
     fn find(&self, name: &str) -> Option<PathBuf> {
         let direct = self.dir.join(name);
-        if direct.is_file() {
+        if direct.host_is_file() {
             return Some(direct);
         }
         let listing = self.listing.get_or_init(|| {
             let mut map = std::collections::HashMap::new();
-            if let Ok(rd) = std::fs::read_dir(&self.dir) {
+            if let Ok(rd) = nfs_platform::fs::read_dir(&self.dir) {
                 for p in rd.flatten().map(|e| e.path()) {
                     if let Some(n) = p.file_name().and_then(|n| n.to_str()) {
                         map.entry(n.to_ascii_lowercase()).or_insert(p);
@@ -403,7 +405,7 @@ impl TrackAssets {
         // the small files; every result is kept and the errors are raised afterwards in the order the
         // sequential load met them, so the same file fails first and nothing is ordered by completion.
         // The original loads sequentially (load steps 0x4A4A70).
-        let (crp_res, tex_res, sky_res, map_res, edges_res, scene_forward, scene_backward, scene_cameras, animdefs, draw_keys, sky_bin) = std::thread::scope(|s| {
+        let (crp_res, tex_res, sky_res, map_res, edges_res, scene_forward, scene_backward, scene_cameras, animdefs, draw_keys, sky_bin) = nfs_platform::thread::scope(|s| {
             let crp_h = s.spawn(|| -> Result<(PathBuf, Vec<u8>, Crp), AssetError> {
                 let crp_path = file(".crp")?;
                 let crp_data = read_pack(&crp_path)?;
@@ -430,7 +432,7 @@ impl TrackAssets {
             // one `animdefs.txt` for every track, beside the track files
             let animdefs = lookup
                 .find("animdefs.txt")
-                .and_then(|p| std::fs::read(p).ok())
+                .and_then(|p| nfs_platform::fs::read(p).ok())
                 .map(|b| nfs_formats::animdefs::AnimDefs::parse(&b.iter().map(|&c| nfs_formats::locale::cp1252(c)).collect::<String>()))
                 .unwrap_or_default();
             let scene = |suffix: &str| -> Result<Option<Scene>, AssetError> {
@@ -442,7 +444,7 @@ impl TrackAssets {
             let keys = |suffix: &str| -> nfs_formats::key::DrawKeys {
                 file(suffix)
                     .ok()
-                    .and_then(|p| std::fs::read(p).ok())
+                    .and_then(|p| nfs_platform::fs::read(p).ok())
                     .and_then(|d| nfs_formats::key::DrawKeys::parse(&d).ok())
                     .unwrap_or_default()
             };
@@ -530,7 +532,7 @@ impl TrackAssets {
     /// Load `Track/<track><suffix>` (e.g. `_st1.scn`) as a scene.
     pub fn load_scene(&self, suffix: &str) -> Result<Option<Scene>, AssetError> {
         let Some(p) = GamePaths::find_file(&self.dir, &format!("{}{}", self.name, suffix)) else { return Ok(None) };
-        let text = String::from_utf8_lossy(&std::fs::read(&p).map_err(|e| AssetError::Io { path: p.clone(), source: e })?).into_owned();
+        let text = String::from_utf8_lossy(&nfs_platform::fs::read(&p).map_err(|e| AssetError::Io { path: p.clone(), source: e })?).into_owned();
         Ok(Some(Scene::parse(&text).map_err(fmt_err(&p))?))
     }
 
@@ -619,12 +621,12 @@ impl TrackAssets {
     pub fn racing_line(&self, paths: &GamePaths, backwards: bool) -> Option<nfs_formats::ais::RacingLine> {
         let dir = paths.track_dir().join("racer").join("work");
         let p = GamePaths::find_file(&dir, &format!("{}{}.lsp", self.name, backwards as u8))?;
-        nfs_formats::ais::RacingLine::parse(&std::fs::read(p).ok()?).ok()
+        nfs_formats::ais::RacingLine::parse(&nfs_platform::fs::read(p).ok()?).ok()
     }
 
     /// Names of all tracks present in the installation (files `<name>.crp` in `GameData/Track`).
     pub fn list(paths: &GamePaths) -> Vec<String> {
-        let mut v: Vec<String> = std::fs::read_dir(paths.track_dir())
+        let mut v: Vec<String> = nfs_platform::fs::read_dir(paths.track_dir())
             .into_iter()
             .flatten()
             .flatten()
@@ -647,16 +649,16 @@ mod dir_lookup_tests {
     #[test]
     fn matches_find_file() {
         let dir = std::env::temp_dir().join(format!("nfs-dirlookup-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("Alps_AUDIO.scn"), b"x").unwrap();
-        std::fs::write(dir.join("alps.crp"), b"x").unwrap();
+        nfs_platform::fs::create_dir_all(&dir).unwrap();
+        nfs_platform::fs::write(dir.join("Alps_AUDIO.scn"), b"x").unwrap();
+        nfs_platform::fs::write(dir.join("alps.crp"), b"x").unwrap();
         let lookup = DirLookup::new(&dir);
         for name in ["alps.crp", "ALPS.CRP", "alps_audio.scn", "Alps_Audio.SCN", "alps.fsh", "alps_missing.key"] {
             assert_eq!(lookup.find(name), GamePaths::find_file(&dir, name), "{name}");
         }
         assert!(lookup.find("alps_audio.scn").is_some());
         assert!(lookup.find("alps.fsh").is_none());
-        std::fs::remove_dir_all(&dir).unwrap();
+        nfs_platform::fs::remove_dir_all(&dir).unwrap();
     }
 }
 

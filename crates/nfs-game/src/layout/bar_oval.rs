@@ -79,7 +79,7 @@ impl LayoutScreen {
     pub fn load_bar_oval(&mut self, r: &mut Renderer, paths: &GamePaths) {
         let dir = paths.fe_data().join("Art");
         let art = GamePaths::find_file(&dir, PACK)
-            .and_then(|p| std::fs::read(&p).ok().map(|d| (p, d)))
+            .and_then(|p| nfs_platform::fs::read(&p).ok().map(|d| (p, d)))
             .and_then(|(p, d)| decode_pack(&p, &d).ok())
             .and_then(|images| {
                 let img = images.into_iter().find(|i| i.name == TAG)?;

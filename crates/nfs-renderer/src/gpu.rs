@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nfs_platform::PathExt as _;
 use crate::front::{Cmd, CmdList};
 use crate::{depth_bias_offset, Camera, FakeSortMode, LensProbe, LensRead, MaterialDesc, MeshData, Scene, Sprite, SpriteCompare, TextureData, Vertex};
 use anyhow::{Context, Result};
@@ -241,6 +243,8 @@ pub(crate) struct Core {
     sprite_sampler: wgpu::Sampler,
     object_buf: wgpu::Buffer,
     object_bg: wgpu::BindGroup,
+    uniform_objects: bool,
+    object_stride: u32,
     meshes: Vec<GpuMesh>,
     arena: Option<MeshArena>,
     textures: Vec<GpuTexture>,
@@ -273,6 +277,7 @@ pub(crate) struct Core {
     /// the surface carries `COPY_SRC`, so the lens flare's frame read-back can copy from it
     /// ([`Self::set_lens_enabled`])
     lens_enabled: bool,
+    surface_copy_supported: bool,
     /// read-backs issued and not yet collected, oldest first
     lens_pending: Vec<LensPending>,
     /// read-backs collected, for the front to hand to the game
@@ -404,6 +409,8 @@ pub const VIEW_FAR: f32 = 700.0;
 fn gpu_error(e: wgpu::Error) {
     static COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let n = COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+    #[cfg(target_arch = "wasm32")]
+    if n == 1 { nfs_platform::browser_failure(&format!("Graphics error: {e}")); }
     if n <= 40 || n % 1000 == 0 {
         // (its Display carries the cause: "Validation Error / Caused by: In Device::create_texture ...")
         tracing::error!(count = n, "wgpu error (uncaptured): {e}");
@@ -418,7 +425,7 @@ fn win_dxc_path() -> Option<String> {
     }
     let dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
     let (dxc, dxil) = (dir.join("dxcompiler.dll"), dir.join("dxil.dll"));
-    (dxc.is_file() && dxil.is_file()).then(|| dxc.to_string_lossy().into_owned())
+    (dxc.host_is_file() && dxil.host_is_file()).then(|| dxc.to_string_lossy().into_owned())
 }
 
 /// PLATFORM GLUE: the instance for `backends`; `dxc` = the DXC library path for the Direct3D 12 backend, `None` = FXC.
@@ -443,13 +450,17 @@ pub(crate) fn prefer_dx12_over(vendor: u32, device_type: wgpu::DeviceType, backe
 }
 
 impl Core {
-    pub fn new(window: Arc<Window>) -> Result<Self> {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn new(window: Arc<Window>) -> Result<Self> { pollster::block_on(Self::new_async(window)) }
+    pub async fn new_async(window: Arc<Window>) -> Result<Self> {
         let size = window.inner_size();
         // PLATFORM GLUE: the graphics API. Vulkan / Metal / Direct3D 12 first; OpenGL (EGL / WGL) only when none of
         // them gives an adapter for this window (a machine without a Vulkan driver). `WGPU_BACKEND` (wgpu's own
         // variable, e.g. `gl` or `vulkan`) picks the API instead, for testing the fallback.
         // PLATFORM GLUE (Windows): the Direct3D 12 backend compiles with DXC from beside the exe, else FXC; an Intel integrated
         // GPU takes its Direct3D 12 adapter instead of Vulkan (see `win_dxc_path`, `prefer_dx12_over`).
+        #[cfg(not(target_arch = "wasm32"))]
+        let (instance, surface, adapter) = {
         let backend_forced = wgpu::Backends::from_env().is_some();
         let open = |backends: wgpu::Backends, dxc: Option<&str>| -> Result<(wgpu::Instance, wgpu::Surface<'static>, wgpu::Adapter)> {
             let mut instance = new_instance(&window, backends, dxc);
@@ -511,6 +522,22 @@ impl Core {
             let i = a.get_info();
             tracing::info!(name = %i.name, backend = ?i.backend, device_type = ?i.device_type, driver = %i.driver, driver_info = %i.driver_info, vendor = format_args!("{:#06x}", i.vendor), device = format_args!("{:#06x}", i.device), "gpu adapter available");
         }
+        (instance, surface, adapter)
+        };
+        #[cfg(target_arch = "wasm32")]
+        let (instance, surface, adapter) = {
+            let instance = wgpu::Instance::new(wgpu::InstanceDescriptor { backends: wgpu::Backends::BROWSER_WEBGPU | wgpu::Backends::GL, ..wgpu::InstanceDescriptor::new_without_display_handle() });
+            let surface = instance.create_surface(window.clone())?;
+            match instance.request_adapter(&wgpu::RequestAdapterOptions { compatible_surface: Some(&surface), ..Default::default() }).await {
+                Ok(adapter) => (instance, surface, adapter),
+                Err(_) => {
+                    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor { backends: wgpu::Backends::GL, ..wgpu::InstanceDescriptor::new_without_display_handle() });
+                    let surface = instance.create_surface(window.clone())?;
+                    let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions { compatible_surface: Some(&surface), ..Default::default() }).await.context("WebGPU and WebGL2 adapters unavailable")?;
+                    (instance, surface, adapter)
+                }
+            }
+        };
         tracing::info!(adapter = ?adapter.get_info().name, backend = ?adapter.get_info().backend, "gpu adapter");
         let _ = crate::ADAPTER_LABEL.set(format!("{} · {:?}", adapter.get_info().name, adapter.get_info().backend));
         tracing::info!(info = ?adapter.get_info(), features = ?adapter.features(), "chosen adapter");
@@ -519,17 +546,22 @@ impl Core {
         // read, and the next start then runs in safe mode (`guard.rs` in the application).
         let minimal = crate::prof::minimal();
         tracing::info!(minimal, "requesting the device (if the log ends here, the driver crashed creating it: the next start runs in safe mode)");
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("nfs-renderer"),
             // no optional feature for the game itself; the profiler adds the timestamp queries only when asked (never in `minimal`)
             required_features: if crate::prof::wanted() { adapter.features() & wgpu::Features::TIMESTAMP_QUERY } else { wgpu::Features::empty() },
-            required_limits: wgpu::Limits::default(),
+            required_limits: if adapter.get_info().backend == wgpu::Backend::Gl { wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits()) } else { wgpu::Limits::default() },
             ..Default::default()
-        }))
+        }).await
         .context("request device")?;
         // A GPU error never stops the game: wgpu's default for an error no scope caught is a panic, which closes a GUI release silently.
         device.on_uncaptured_error(Arc::new(gpu_error));
-        device.set_device_lost_callback(|reason, msg| tracing::error!(?reason, "wgpu device lost: {msg}"));
+        device.set_device_lost_callback(|reason, msg| {
+            if reason == wgpu::DeviceLostReason::Destroyed { return; }
+            tracing::error!(?reason, "wgpu device lost: {msg}");
+            #[cfg(target_arch = "wasm32")]
+            if reason != wgpu::DeviceLostReason::Destroyed { nfs_platform::browser_failure(&format!("Graphics device lost: {msg}. Reload to restore your saved profile.")); }
+        });
         // TEST GLUE `NFS_TEST_GPU_ERROR=1`: one invalid resource, to see the handler log it and the game go on
         if std::env::var_os("NFS_TEST_GPU_ERROR").is_some() {
             let _ = device.create_texture(&wgpu::TextureDescriptor { label: Some("test glue: invalid"), size: wgpu::Extent3d { width: 0, height: 0, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format: wgpu::TextureFormat::Rgba8Unorm, usage: wgpu::TextureUsages::TEXTURE_BINDING, view_formats: &[] });
@@ -561,9 +593,20 @@ impl Core {
         surface.configure(&device, &config);
         let depth_view = Self::make_depth(&device, &config);
 
+        let validation_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let uniform_objects = adapter.get_info().backend == wgpu::Backend::Gl;
+        let object_stride = if uniform_objects {
+            (std::mem::size_of::<ObjectUniform>() as u32).div_ceil(device.limits().min_uniform_buffer_offset_alignment) * device.limits().min_uniform_buffer_offset_alignment
+        } else { std::mem::size_of::<ObjectUniform>() as u32 };
+        let shader_source = if uniform_objects {
+            include_str!("shader.wgsl")
+                .replace("var<storage, read> objects: array<Object>;", "var<uniform> selected_object: Object;")
+                .replace("objects[inst]", "selected_object")
+                .replace("objects[in.obj]", "selected_object")
+        } else { include_str!("shader.wgsl").to_owned() };
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("mesh shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
         });
         let globals_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("globals"),
@@ -610,8 +653,8 @@ impl Core {
                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                 // every object of a pass in one buffer, indexed by `instance_index`
                 ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
+                    ty: if uniform_objects { wgpu::BufferBindingType::Uniform } else { wgpu::BufferBindingType::Storage { read_only: true } },
+                    has_dynamic_offset: uniform_objects,
                     min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<ObjectUniform>() as u64),
                 },
                 count: None,
@@ -753,7 +796,7 @@ impl Core {
             }
         }
         let workers = std::thread::available_parallelism().map_or(1, |n| n.get()).clamp(1, 8);
-        let pipelines: Vec<wgpu::RenderPipeline> = std::thread::scope(|sc| {
+        let pipelines: Vec<wgpu::RenderPipeline> = nfs_platform::thread::scope(|sc| {
             let make_pipeline = &make_pipeline;
             let handles: Vec<_> = specs
                 .chunks(specs.len().div_ceil(workers))
@@ -832,8 +875,8 @@ impl Core {
         });
         let object_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("objects"),
-            size: std::mem::size_of::<ObjectUniform>() as u64 * MAX_OBJECTS,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            size: object_stride as u64 * MAX_OBJECTS,
+            usage: (if uniform_objects { wgpu::BufferUsages::UNIFORM } else { wgpu::BufferUsages::STORAGE }) | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let object_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -844,7 +887,7 @@ impl Core {
                 resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                     buffer: &object_buf,
                     offset: 0,
-                    size: None,
+                    size: if uniform_objects { wgpu::BufferSize::new(std::mem::size_of::<ObjectUniform>() as u64) } else { None },
                 }),
             }],
         });
@@ -974,6 +1017,8 @@ impl Core {
             gamma: 1.0,
             gamma_pass: None,
             sprite_sampler,
+            uniform_objects,
+            object_stride,
             object_buf,
             object_bg,
             meshes: Vec::new(),
@@ -994,6 +1039,7 @@ impl Core {
             depth_cache: std::collections::HashMap::new(),
             buckets: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
             lens_enabled: false,
+            surface_copy_supported: caps.usages.contains(wgpu::TextureUsages::COPY_SRC),
             lens_pending: Vec::new(),
             lens_done: Vec::new(),
             lens_staged: Vec::new(),
@@ -1004,6 +1050,7 @@ impl Core {
         };
         let _ = &r.object_layout;
         r.white = r.upload_texture(&TextureData::single(1, 1, vec![255, 255, 255, 255]));
+        if let Some(error) = validation_scope.pop().await { anyhow::bail!("renderer initialization: {error}"); }
         Ok(r)
     }
 
@@ -1073,7 +1120,7 @@ impl Core {
         }
         while self.frames_in_flight.len() > MAX_FRAMES_IN_FLIGHT {
             let oldest = self.frames_in_flight.pop_front().expect("non-empty");
-            let _ = self.device.poll(wgpu::PollType::Wait { submission_index: Some(oldest), timeout: Some(std::time::Duration::from_secs(1)) });
+            let _ = self.device.poll(wgpu::PollType::Wait { submission_index: Some(oldest), timeout: Some(nfs_platform::time::Duration::from_secs(1)) });
         }
     }
 
@@ -1104,7 +1151,7 @@ impl Core {
             return;
         }
         self.lens_enabled = on;
-        self.config.usage = if on { wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC } else { wgpu::TextureUsages::RENDER_ATTACHMENT };
+        self.config.usage = if on && self.surface_copy_supported { wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC } else { wgpu::TextureUsages::RENDER_ATTACHMENT };
         self.surface.configure(&self.device, &self.config);
         if !on {
             self.lens_pending.clear();
@@ -1117,7 +1164,7 @@ impl Core {
         if self.lens_pending.is_empty() {
             return;
         }
-        let t0 = std::time::Instant::now();
+        let t0 = nfs_platform::time::Instant::now();
         let _ = self.device.poll(wgpu::PollType::Poll);
         let mut keep = Vec::new();
         for p in std::mem::take(&mut self.lens_pending) {
@@ -1337,7 +1384,7 @@ impl Core {
         } else {
             let (device, queue, layout, sampler) = (&self.device, &self.queue, &self.sprite_layout, &self.sprite_sampler);
             let chunk = items.len().div_ceil(workers);
-            std::thread::scope(|s| {
+            nfs_platform::thread::scope(|s| {
                 let handles: Vec<_> = items
                     .chunks(chunk)
                     .map(|c| s.spawn(move || c.iter().map(|&(w, h, m)| Self::make_texture(device, queue, layout, sampler, w, h, m)).collect::<Vec<_>>()))
@@ -1638,7 +1685,7 @@ impl Core {
     /// buffer and the ramp is the display's.
     fn encode_with_gamma(&mut self, scene: &Scene, camera: &Camera, frame: FrameTarget, width: u32, height: u32, aspect: f32) {
         let FrameTarget { view: target, texture: target_tex, can_copy, depth_view: depth } = frame;
-        if self.gamma == 1.0 {
+        if self.gamma == 1.0 && (!self.lens_enabled || can_copy) {
             self.encode_frame(scene, camera, FrameTarget { view: target, texture: target_tex, can_copy, depth_view: depth }, FrameOpts { clear_color: scene.clear_color, with_sprites: true, aspect, depth_far: VIEW_FAR });
             crate::prof::end_frame(&self.device);
             return;
@@ -1673,7 +1720,7 @@ impl Core {
         let aspect = self.aspect();
         let depth = self.depth_view.clone();
         let (w, h) = (frame.texture.width(), frame.texture.height());
-        let can_copy = self.lens_enabled;
+        let can_copy = self.lens_enabled && self.surface_copy_supported;
         self.encode_with_gamma(scene, camera, FrameTarget { view: &view, texture: &frame.texture, can_copy, depth_view: &depth }, w, h, aspect);
         self.queue.present(frame);
         self.collect_lens();
@@ -1871,6 +1918,14 @@ impl Core {
     /// Set what a run needs that the pass does not already hold, then draw it: one instanced draw
     /// of `r.count` consecutive objects (`first_instance` = the first object's index).
     fn draw_run(&self, pass: &mut wgpu::RenderPass<'_>, st: &mut DrawState, r: &Run) {
+        if self.uniform_objects {
+            for index in r.first..r.first + r.count {
+                pass.set_bind_group(1, &self.object_bg, &[index * self.object_stride]);
+                self.draw_run_inner(pass, st, &Run { first: 0, count: 1, ..*r });
+            }
+        } else { self.draw_run_inner(pass, st, r); }
+    }
+    fn draw_run_inner(&self, pass: &mut wgpu::RenderPass<'_>, st: &mut DrawState, r: &Run) {
         if st.pipeline != r.pipeline {
             pass.set_pipeline(&self.pipelines[r.pipeline]);
             st.pipeline = r.pipeline;
@@ -2019,7 +2074,17 @@ impl Core {
                     sky_on: [sky_tex_of(&self.materials, self.no_reflections, item).is_some() as u32 as f32, item.sky_pass as u32 as f32, item.fog_w, 0.0],
                 };
             }
-            self.belt.write_buffer(&mut encoder, &self.object_buf, 0, size).copy_from_slice(bytemuck::cast_slice(&objects));
+            if self.uniform_objects {
+                let mut padded = vec![0u8; n * self.object_stride as usize];
+                for (object, slot) in objects.iter().zip(padded.chunks_mut(self.object_stride as usize)) {
+                    let bytes = bytemuck::bytes_of(object);
+                    slot[..bytes.len()].copy_from_slice(bytes);
+                }
+                let size = wgpu::BufferSize::new(padded.len() as u64).expect("uniform object upload");
+                self.belt.write_buffer(&mut encoder, &self.object_buf, 0, size).copy_from_slice(&padded);
+            } else {
+                self.belt.write_buffer(&mut encoder, &self.object_buf, 0, size).copy_from_slice(bytemuck::cast_slice(&objects));
+            }
             self.object_scratch = objects;
         }
 
@@ -2067,7 +2132,7 @@ impl Core {
             multiview_mask: None,
             });
             pass.set_bind_group(0, &self.globals_bg, &[]);
-            pass.set_bind_group(1, &self.object_bg, &[]);
+            pass.set_bind_group(1, &self.object_bg, if self.uniform_objects { &[0] } else { &[] });
             let mut st = DrawState::NONE;
             self.draw_bucket(&mut pass, scene, &buckets[0], &mut st, white);
             drop(pass);
@@ -2092,7 +2157,7 @@ impl Core {
             multiview_mask: None,
             });
             pass.set_bind_group(0, &self.globals_bg, &[]);
-            pass.set_bind_group(1, &self.object_bg, &[]);
+            pass.set_bind_group(1, &self.object_bg, if self.uniform_objects { &[0] } else { &[] });
             let mut st = DrawState::NONE;
             for bucket in &buckets[..3] {
                 self.draw_bucket(&mut pass, scene, bucket, &mut st, white);
@@ -2119,7 +2184,7 @@ impl Core {
             multiview_mask: None,
             });
             pass.set_bind_group(0, &self.globals_bg, &[]);
-            pass.set_bind_group(1, &self.object_bg, &[]);
+            pass.set_bind_group(1, &self.object_bg, if self.uniform_objects { &[0] } else { &[] });
             let mut st = DrawState::NONE;
             self.draw_bucket(&mut pass, scene, &buckets[3], &mut st, white);
         }

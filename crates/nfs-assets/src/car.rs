@@ -196,7 +196,7 @@ impl Paint {
     /// taken.
     pub fn tint_table(&self, paths: &GamePaths) -> [[u8; 3]; 18] {
         let colours = [self.exterior, self.stripe1, self.stripe2, self.interior];
-        let ini = GamePaths::find_file(&paths.car_model_dir(), "packages.ini").and_then(|p| std::fs::read_to_string(p).ok()).map(|t| Ini::parse(&t));
+        let ini = GamePaths::find_file(&paths.car_model_dir(), "packages.ini").and_then(|p| nfs_platform::fs::read_to_string(p).ok()).map(|t| Ini::parse(&t));
         let count = ini.as_ref().and_then(|i| i.section("header")).and_then(|h| h.get_i64("count")).unwrap_or(0);
         let Some(ini) = ini.filter(|_| (self.package as i64) < count) else { return [self.exterior; 18] };
         let sec = ini.section(&format!("package{}", self.package + 1));
@@ -949,7 +949,7 @@ fn blend_32(d: &mut [u8], s: u32) {
 /// bytes a row (0x53CFE0) — an odd `u` or `w` takes a neighbouring nibble along, as there.
 fn page_text_draw(page: &mut TexturePage, paths: &GamePaths, font_file: &str, text: &str, rect: (i64, i64, i64, i64), abc: [u32; 3], half: bool) {
     let Some(font) = GamePaths::find_file(&paths.car_model_dir(), font_file)
-        .and_then(|p| std::fs::read(p).ok())
+        .and_then(|p| nfs_platform::fs::read(p).ok())
         .and_then(|d| nfs_formats::fnt::Font::parse(&d).ok())
     else {
         return;
@@ -1451,7 +1451,7 @@ mod wheel_channel_tests {
     fn wheel_articles_are_on_the_spinning_or_the_still_channels() {
         let Ok(paths) = GamePaths::locate() else { return };
         let dir = paths.car_model_dir();
-        let Ok(entries) = std::fs::read_dir(&dir) else { return };
+        let Ok(entries) = nfs_platform::fs::read_dir(&dir) else { return };
         let mut seen = 0usize;
         for e in entries.flatten() {
             let p = e.path();

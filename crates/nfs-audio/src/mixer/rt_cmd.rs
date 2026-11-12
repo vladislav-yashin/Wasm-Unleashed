@@ -96,7 +96,7 @@ impl Snapshot {
 /// of the buffer plus the buffer), and when it ran (ns since `epoch`, plus 1; 0 before the first
 /// callback) — for [`AudioOutput::latency_ms`].
 pub(super) struct Latency {
-    pub(super) epoch: std::time::Instant,
+    pub(super) epoch: nfs_platform::time::Instant,
     pub(super) frames: AtomicU64,
     pub(super) at: AtomicU64,
 }
@@ -146,7 +146,7 @@ pub(super) const QUEUE: usize = 4096;
 pub(super) const GC_QUEUE: usize = 256;
 
 /// What a push waits for a full queue (a callback that has stopped) before the command is dropped.
-pub(super) const PUSH_WAIT: std::time::Duration = std::time::Duration::from_millis(50);
+pub(super) const PUSH_WAIT: nfs_platform::time::Duration = nfs_platform::time::Duration::from_millis(50);
 
 /// The callback's buffers, made before it runs ([`Shared::reserve_rt`]).
 pub(super) const RT_VOICES: usize = 512;
@@ -323,7 +323,7 @@ impl Tx {
         // callback's `publish` is `snap`'s try_lock; if it ran before any status call of the game thread
         // had locked it, that first lock allocated in the callback. Locked once here, off the callback.
         drop(snap.lock().unwrap());
-        let lat = Arc::new(Latency { epoch: std::time::Instant::now(), frames: AtomicU64::new(0), at: AtomicU64::new(0) });
+        let lat = Arc::new(Latency { epoch: nfs_platform::time::Instant::now(), frames: AtomicU64::new(0), at: AtomicU64::new(0) });
         let mut shared = Shared::default();
         shared.reserve_rt();
         let core = Core { shared, rx, gc: gc_tx, applied: 0, snap: snap.clone(), lat: lat.clone(), device_rate };
@@ -343,7 +343,7 @@ impl Tx {
             drop(old);
         }
         let mut cmd = cmd;
-        let t0 = std::time::Instant::now();
+        let t0 = nfs_platform::time::Instant::now();
         loop {
             match st.prod.push(cmd) {
                 Ok(()) => break,

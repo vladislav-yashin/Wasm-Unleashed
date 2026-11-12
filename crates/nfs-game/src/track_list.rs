@@ -71,7 +71,7 @@ pub struct TrackListTables {
 impl TrackListTables {
     pub fn load(paths: &nfs_assets::GamePaths) -> Self {
         let dir = paths.fe_data().join("Data");
-        let read = |n: &str| std::fs::read(dir.join(n)).ok();
+        let read = |n: &str| nfs_platform::fs::read(dir.join(n)).ok();
         let tracks = read("nfs5.trk").and_then(|d| nfs_formats::career::parse_track_table(&d).ok()).unwrap_or_default();
         let tournaments = read("nfs5.trn").and_then(|d| nfs_formats::career::parse_tournaments(&d).ok()).unwrap_or_default();
         Self { tracks, tournaments }

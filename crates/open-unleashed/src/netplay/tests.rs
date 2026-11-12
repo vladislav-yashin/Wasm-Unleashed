@@ -439,7 +439,7 @@ fn the_shipped_picture_survives_the_chunks_and_decodes_at_54_by_64() {
     let root = std::env::var_os("NFS5_GAME_PATH").map(std::path::PathBuf::from).or_else(|| {
         std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Games/NFS-Porsche-Unleashed/game_info/data"))
     });
-    let Some(bytes) = root.and_then(|r| std::fs::read(r.join("GameData/DashHud/pic16.fsh")).ok()) else {
+    let Some(bytes) = root.and_then(|r| nfs_platform::fs::read(r.join("GameData/DashHud/pic16.fsh")).ok()) else {
         return;
     };
     let mut a = Room::new(2);

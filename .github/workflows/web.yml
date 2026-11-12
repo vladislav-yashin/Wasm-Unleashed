@@ -1,0 +1,23 @@
+name: Browser build
+on: [push, pull_request]
+jobs:
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: cargo check --locked -p open-unleashed --target wasm32-unknown-unknown
+      - run: cargo test --locked -p nfs-formats -p nfs-net --lib
+      - run: python3 -m unittest discover -s tools/web -p 'test_*.py'
+      - run: node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs
+      - run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
+      - run: python3 tools/web/build.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: open-unleashed-web
+          path: dist/

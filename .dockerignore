@@ -1,0 +1,7 @@
+**
+!dist/
+!dist/**
+!packaging/
+!packaging/web/
+!packaging/web/Dockerfile
+!packaging/web/nginx.conf

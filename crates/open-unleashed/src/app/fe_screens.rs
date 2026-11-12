@@ -362,7 +362,7 @@ impl App {
                 // read off `self.paths` (disjoint from `self.fe`, which `m` borrows) — here, for
                 // this arm alone: it used to read and parse `nfs5.car` on every step of any
                 // accessor of this function
-                let default_colour = default_paint_colour(&nfs_formats::fedata::parse_car_catalog(&std::fs::read(self.paths.fe_data().join("Data").join("nfs5.car")).unwrap_or_default()).unwrap_or_default());
+                let default_colour = default_paint_colour(&nfs_formats::fedata::parse_car_catalog(&nfs_platform::fs::read(self.paths.fe_data().join("Data").join("nfs5.car")).unwrap_or_default()).unwrap_or_default());
                 m.car_idx = step(m.car_idx, m.cars.len());
                 m.paint_idx = m.cars.get(m.car_idx).map(|c| default_paint_row(default_colour, &c.paint_sets)).unwrap_or(0);
                 m.paint_custom = None;

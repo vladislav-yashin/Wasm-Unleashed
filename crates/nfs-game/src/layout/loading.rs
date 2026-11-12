@@ -41,7 +41,7 @@ pub struct LoadingScreen {
 fn load_pack(r: &mut Renderer, paths: &GamePaths, name: &str) -> Vec<Art> {
     let dir = paths.fe_data().join("Art");
     GamePaths::find_file(&dir, name)
-        .and_then(|p| std::fs::read(&p).ok().map(|d| (p, d)))
+        .and_then(|p| nfs_platform::fs::read(&p).ok().map(|d| (p, d)))
         .and_then(|(p, d)| decode_pack(&p, &d).ok())
         .unwrap_or_default()
         .into_iter()
@@ -163,7 +163,7 @@ type Entry = (TextureId, f32, f32, i32, i32);
 
 fn load_entries(r: &mut Renderer, dir: &std::path::Path, name: &str) -> Vec<Entry> {
     GamePaths::find_file(dir, name)
-        .and_then(|p| std::fs::read(&p).ok().map(|d| (p, d)))
+        .and_then(|p| nfs_platform::fs::read(&p).ok().map(|d| (p, d)))
         .and_then(|(p, d)| decode_pack(&p, &d).ok())
         .unwrap_or_default()
         .into_iter()

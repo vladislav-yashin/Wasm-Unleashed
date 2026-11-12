@@ -60,23 +60,23 @@ pub struct Rumbler {
     strong: f32,
     weak: f32,
     /// (end, level) of a pulse in flight
-    pulse: Option<(std::time::Instant, f32)>,
+    pulse: Option<(nfs_platform::time::Instant, f32)>,
     /// (low, high, when) of the last call sent
-    sent: Option<(u16, u16, std::time::Instant)>,
+    sent: Option<(u16, u16, nfs_platform::time::Instant)>,
     /// when a refused call may be tried again
-    retry_at: Option<std::time::Instant>,
+    retry_at: Option<nfs_platform::time::Instant>,
 }
 
 /// How long one sustained call runs before SDL stops the motors by itself (SDL caps a call at
 /// 0xFFFF ms); renewed whenever the caller touches the rumbler after half of it.
 const SUSTAIN_MS: u32 = 60_000;
 /// The shortest time between two calls that only change a sustained level (PAD-HANG).
-pub const MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
+pub const MIN_INTERVAL: nfs_platform::time::Duration = nfs_platform::time::Duration::from_millis(100);
 /// How many levels a motor has (PAD-HANG): a change smaller than 1/32 of the range is not sent.
 pub const LEVEL_STEPS: u16 = 32;
 /// How long a refused call (an engine CoreHaptics stopped, a pad that went away) waits before the
 /// next try.
-const RETRY: std::time::Duration = std::time::Duration::from_secs(2);
+const RETRY: nfs_platform::time::Duration = nfs_platform::time::Duration::from_secs(2);
 
 /// A 0…1 level as SDL's 0…65535 in [`LEVEL_STEPS`] steps, rounded to the nearest; a level above 0
 /// is at least one step (a quiet rumble does not become a stop).
@@ -91,11 +91,11 @@ pub fn quantise(level: f32) -> u16 {
 
 impl Rumbler {
     fn apply(&mut self, pads: &mut impl RumbleSink, urgent: bool) {
-        self.apply_at(pads, std::time::Instant::now(), urgent);
+        self.apply_at(pads, nfs_platform::time::Instant::now(), urgent);
     }
 
     /// Send the combined state if it is due. `urgent`: a pulse or a stop the caller asked for.
-    fn apply_at(&mut self, pads: &mut impl RumbleSink, now: std::time::Instant, urgent: bool) {
+    fn apply_at(&mut self, pads: &mut impl RumbleSink, now: nfs_platform::time::Instant, urgent: bool) {
         let mut pulse_ended = false;
         let pulse = match self.pulse {
             Some((end, level)) if end > now => level,
@@ -109,7 +109,7 @@ impl Rumbler {
         // a pulse drives both motors (PAD-FF, D24 A2): over the engine's buzz on the weak motor a
         // strong-only pulse was hardly felt
         let (low, high) = (quantise(self.strong.max(pulse)), quantise(self.weak.max(pulse)));
-        let renew = |t: std::time::Instant| now.saturating_duration_since(t).as_millis() >= u128::from(SUSTAIN_MS / 2);
+        let renew = |t: nfs_platform::time::Instant| now.saturating_duration_since(t).as_millis() >= u128::from(SUSTAIN_MS / 2);
         let due = match self.sent {
             None => low != 0 || high != 0,
             Some((l, h, t)) if l == low && h == high => renew(t),
@@ -166,17 +166,17 @@ impl Rumbler {
 
     /// A one-shot pulse of both motors at `level` (0…1) for `ms` milliseconds.
     pub fn pulse(&mut self, pads: &mut crate::gamepad::Devices, level: f32, ms: u32) {
-        if self.start_pulse(std::time::Instant::now(), level, ms) {
+        if self.start_pulse(nfs_platform::time::Instant::now(), level, ms) {
             self.apply(pads, true);
         }
     }
 
-    fn start_pulse(&mut self, now: std::time::Instant, level: f32, ms: u32) -> bool {
+    fn start_pulse(&mut self, now: nfs_platform::time::Instant, level: f32, ms: u32) -> bool {
         let level = level.clamp(0.0, 1.0);
         if level <= 0.0 {
             return false;
         }
-        self.pulse = Some((now + std::time::Duration::from_millis(u64::from(ms.max(1))), level));
+        self.pulse = Some((now + nfs_platform::time::Duration::from_millis(u64::from(ms.max(1))), level));
         // re-sent even when the pair is the same: the pulse's own duration starts now
         self.sent = None;
         true
@@ -457,7 +457,7 @@ impl Drop for HapticWheel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{Duration, Instant};
+    use nfs_platform::time::{Duration, Instant};
 
     /// Records every rumble call with the time the rumbler was told.
     #[derive(Default)]

@@ -29,10 +29,10 @@ pub(super) fn lockstep_glue() -> Option<u64> {
 pub(super) fn remote_dump(line: impl FnOnce() -> String) {
     use std::io::Write;
     use std::sync::{Mutex, OnceLock};
-    static OUT: OnceLock<Option<Mutex<std::io::BufWriter<std::fs::File>>>> = OnceLock::new();
+    static OUT: OnceLock<Option<Mutex<std::io::BufWriter<nfs_platform::fs::File>>>> = OnceLock::new();
     let out = OUT.get_or_init(|| {
         let path = nfs_game::config::cfg().nfs_net_remote_dump.as_str()?;
-        std::fs::File::create(path).ok().map(|f| Mutex::new(std::io::BufWriter::new(f)))
+        nfs_platform::fs::File::create(path).ok().map(|f| Mutex::new(std::io::BufWriter::new(f)))
     });
     if let Some(m) = out
         && let Ok(mut w) = m.lock()

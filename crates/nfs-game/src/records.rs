@@ -10,6 +10,8 @@
 //! installation, which this port treats as read-only reference material, so the file lives under
 //! [`crate::save::save_dir`].
 
+#[allow(unused_imports)]
+use nfs_platform::PathExt as _;
 use nfs_assets::GamePaths;
 use nfs_formats::career::{parse_track_table, TrackRecord, TrackRecordFile};
 use std::path::{Path, PathBuf};
@@ -118,8 +120,8 @@ impl Records {
         let seed_path = paths.fe_data().join("Data").join("nfs5.trk");
         // 0x4FAE20 re-reads the file into the live buffer: an unsaved filing is gone
         *STAGED.lock().unwrap_or_else(|e| e.into_inner()) = None;
-        let seed = std::fs::read(&seed_path).ok();
-        let data = match std::fs::read(save) {
+        let seed = nfs_platform::fs::read(&seed_path).ok();
+        let data = match nfs_platform::fs::read(save) {
             Ok(d) if !d.is_empty() => Some(d),
             _ => seed.clone(),
         };
@@ -140,7 +142,7 @@ impl Records {
     /// 0x4FAE20 reads it back.
     pub fn reset(paths: &GamePaths, save: &Path) -> Self {
         let seed_path = paths.fe_data().join("Data").join("nfs5.trk");
-        if let Err(e) = std::fs::copy(&seed_path, save) {
+        if let Err(e) = nfs_platform::fs::copy(&seed_path, save) {
             tracing::warn!(error = %e, "track records not reset");
         }
         Self::load(paths, save)
@@ -159,9 +161,9 @@ impl Records {
         let staged = STAGED.lock().unwrap_or_else(|e| e.into_inner()).take();
         let Some((path, raw)) = staged else { return Ok(()) };
         if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir)?;
+            nfs_platform::fs::create_dir_all(dir)?;
         }
-        std::fs::write(path, raw)
+        nfs_platform::fs::write(path, raw)
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
@@ -169,9 +171,9 @@ impl Records {
             return Ok(());
         }
         if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir)?;
+            nfs_platform::fs::create_dir_all(dir)?;
         }
-        std::fs::write(path, &self.file.raw)
+        nfs_platform::fs::write(path, &self.file.raw)
     }
 
     fn find(&self, file: &str) -> Option<&(usize, u32, String, bool)> {
@@ -250,6 +252,8 @@ pub fn hud_records(before: &[TrackRecord], linear: bool, driver: &str, car: &str
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use nfs_platform::PathExt as _;
     #[test]
     fn time_format_takes_a_signed_dword_like_0x4356e0() {
         use super::format_time_dword as f;
@@ -277,23 +281,23 @@ mod tests {
     #[test]
     fn a_filed_record_reaches_the_file_with_the_next_save_only() {
         let dir = std::env::temp_dir().join(format!("pa_savnet_trk_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
+        nfs_platform::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("nfs5.trk");
         let live = Records { file: TrackRecordFile { raw: vec![1, 2, 3, 4] }, meta: Vec::new() };
         live.stage(&path);
-        assert!(!path.exists(), "filing writes no file");
+        assert!(!path.host_exists(), "filing writes no file");
         Records::flush_staged().unwrap();
-        assert_eq!(std::fs::read(&path).unwrap(), [1, 2, 3, 4], "the next save writes the buffer");
-        std::fs::remove_file(&path).unwrap();
+        assert_eq!(nfs_platform::fs::read(&path).unwrap(), [1, 2, 3, 4], "the next save writes the buffer");
+        nfs_platform::fs::remove_file(&path).unwrap();
         Records::flush_staged().unwrap();
-        assert!(!path.exists(), "nothing staged, nothing written");
+        assert!(!path.host_exists(), "nothing staged, nothing written");
         // a reload from disk drops an unsaved filing
         live.stage(&path);
         *STAGED.lock().unwrap() = None;
         Records::flush_staged().unwrap();
-        assert!(!path.exists());
-        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!path.host_exists());
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
     }
 
     #[test]

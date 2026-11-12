@@ -620,6 +620,8 @@ impl App {
     /// Render the scene as it is at `scale` x the window and write it. The hint and the lens probe are not in it;
     /// the HUD is when photo mode shows it.
     pub(crate) fn photo_save_still(&mut self, scale: u32) {
+        #[cfg(target_arch = "wasm32")]
+        { let _ = scale; crate::web::download_frame(); return; }
         let Some((bw, bh)) = self.photo_base_size() else { return };
         let mut scene = self.scene.clone();
         scene.sprites.truncate(self.photo.hint_from.min(scene.sprites.len()));
@@ -635,7 +637,7 @@ impl App {
             }
         };
         let dir = nfs_assets::platform::photo_dir();
-        let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        let secs = nfs_platform::time::SystemTime::now().duration_since(nfs_platform::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
         self.photo.shots += 1;
         let name = format!("PorscheUnleashed_{}_{}_{}x_{}.png", file_safe(&self.track.name), utc_stamp(secs), scale, self.photo.shots);
         let path = dir.join(&name);
@@ -644,7 +646,7 @@ impl App {
         let write = move || {
             // RGB: the frame's alpha is not an image's
             let rgb: Vec<u8> = rgba.chunks_exact(4).flat_map(|p| [p[0], p[1], p[2]]).collect();
-            let r = std::fs::create_dir_all(&dir).map_err(|e| e.to_string()).and_then(|_| image::save_buffer(&path, &rgb, w, h, image::ColorType::Rgb8).map_err(|e| e.to_string()));
+            let r = nfs_platform::fs::create_dir_all(&dir).map_err(|e| e.to_string()).and_then(|_| image::save_buffer(&path, &rgb, w, h, image::ColorType::Rgb8).map_err(|e| e.to_string()));
             match r {
                 Ok(()) => tracing::info!(path = %path.display(), w, h, "photo mode: still written"),
                 Err(e) => tracing::error!(error = e, path = %path.display(), "photo mode: the still could not be written"),

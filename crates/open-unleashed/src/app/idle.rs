@@ -51,6 +51,7 @@ impl App {
     /// the sleep is part of that frame's time.
     // PORT-DEVIATION D4 (RE/notes/PORT-DEVIATIONS.md): NFS_FPS_CAP, opt-in and off by default; the original has no frame cap.
     pub(crate) fn pace_frame(&self) {
+        if cfg!(target_arch = "wasm32") { return; }
         let user = nfs_game::config::cfg().nfs_fps_cap.as_str().and_then(|v| v.trim().parse::<f64>().ok()).filter(|c| *c >= 1.0);
         // PORT-DEVIATION D45 (RE/notes/PORT-DEVIATIONS.md): a race whose window is hidden presents at most 30 fps
         let hidden = self.vehicle.is_some() && self.window_hidden();
@@ -144,6 +145,7 @@ impl App {
     /// vsync does: sleep out the rest of an 8 ms frame (120 Hz — never slower than the display's
     /// own cadence on a 60 Hz one would have been).
     pub(crate) fn idle_wait(&self) {
+        if cfg!(target_arch = "wasm32") { return; }
         let want = Duration::from_millis(8);
         let spent = self.last_frame.elapsed();
         if spent < want {

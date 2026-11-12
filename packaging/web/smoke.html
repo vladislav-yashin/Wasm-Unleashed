@@ -1,0 +1,9 @@
+<!doctype html><meta charset="utf-8"><title>WASM renderer smoke test</title>
+<p id="result">Starting renderer…</p>
+<script type="module">
+window.nfsFatal = error => { document.querySelector('#result').textContent = `FAIL: ${error}`; fetch('/smoke-result', {method:'POST', body:`FAIL: ${error}`}).catch(()=>{}); };
+window.nfsSmokeDone = label => { document.querySelector('#result').textContent = `PASS: ${label}`; fetch('/smoke-result', {method:'POST',body:`PASS: ${label}`}).catch(()=>{}); };
+window.addEventListener('error', event => window.nfsFatal(event.message));
+window.addEventListener('unhandledrejection', event => window.nfsFatal(event.reason));
+try { const {default:init} = await import('./pkg/open_unleashed.js'); await init(); } catch(error) { window.nfsFatal(error); }
+</script>

@@ -68,7 +68,7 @@
 //! is every frame the read-back's latency allows.
 
 use crate::*;
-use std::time::{Duration, Instant};
+use nfs_platform::time::{Duration, Instant};
 
 /// The thirteen records the elements are drawn from: the dwords at 0x5CF530, `bnus` … `nnus`.
 const ELEMENTS: [u32; 13] = {
@@ -143,7 +143,7 @@ impl App {
     pub(crate) fn lens_reset(&mut self) {
         let enabled = self.choice_index(choice::GRAPHICS_LENS_FLARE).is_some_and(|(i, _)| i != 0);
         let mut positions = DEFAULT_POSITIONS;
-        if let Ok(d) = std::fs::read(self.paths.render_dir().join("flarepos.dat")) {
+        if let Ok(d) = nfs_platform::fs::read(self.paths.render_dir().join("flarepos.dat")) {
             positions = [0.0; 14];
             for (p, c) in positions.iter_mut().zip(d.chunks_exact(4)) {
                 *p = nfs_formats::bytes::read_f32(c, 0);

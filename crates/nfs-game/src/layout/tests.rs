@@ -261,11 +261,11 @@ const DISPATCH_PROBES: &[&str] = &[
 fn shipped_classes() -> std::collections::BTreeSet<String> {
     let mut set = std::collections::BTreeSet::new();
     if let Ok(paths) = GamePaths::locate()
-        && let Ok(dir) = std::fs::read_dir(paths.fe_data().join("Layouts"))
+        && let Ok(dir) = nfs_platform::fs::read_dir(paths.fe_data().join("Layouts"))
     {
         for f in dir.flatten() {
             if f.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("lay"))
-                && let Ok(bytes) = std::fs::read(f.path())
+                && let Ok(bytes) = nfs_platform::fs::read(f.path())
             {
                 for e in Layout::parse(&String::from_utf8_lossy(&bytes)).elements {
                     set.insert(e.class);

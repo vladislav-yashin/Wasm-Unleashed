@@ -20,6 +20,10 @@ An independent implementation written from scratch in Rust (winit + wgpu) that r
 > The project is not affiliated with Electronic Arts, Eden Games or Porsche AG; "Need for Speed" and "Porsche" are
 > trademarks of their owners and are named here only to say which game this engine runs.
 
+## Browser (WASM)
+
+Build and run the browser version: [web build and hosting](packaging/web/README.md). Game data is served over HTTP; local progress uses IndexedDB. Multiplayer is planned for a later stage.
+
 ## Documentation
 
 | | English | Русский |

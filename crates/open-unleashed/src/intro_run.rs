@@ -10,7 +10,7 @@ use nfs_renderer::{Camera, Renderer, Scene, Sprite, TextureData, TextureId};
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
+use nfs_platform::time::Instant;
 use winit::window::Window;
 
 /// The two movies in the order 0x4DD600 plays them: `"%searts-av.mad"` (0x5D99BC) and, in
@@ -82,7 +82,7 @@ impl IntroRun {
 
     fn open(&mut self, path: &PathBuf) -> Option<Movie> {
         let tables = self.tables.clone()?;
-        let data = std::fs::read(path).ok()?;
+        let data = nfs_platform::fs::read(path).ok()?;
         let mut video = Vec::new();
         let mut kinds = Vec::new();
         let mut at = 0usize;

@@ -330,9 +330,9 @@ fn mix(category: u8, trim: u32, vol: i32) -> f32 {
 
 impl AiEngines {
     pub fn load(sounds_dir: &Path) -> anyhow::Result<Self> {
-        let viv = std::fs::read(sounds_dir.join("zzzwzzz.viv"))?;
+        let viv = nfs_platform::fs::read(sounds_dir.join("zzzwzzz.viv"))?;
         Bigf::parse(&viv)?; // fail early when the archive is unreadable
-        let coll = std::fs::read(sounds_dir.join("SND_coll.bnk")).ok();
+        let coll = nfs_platform::fs::read(sounds_dir.join("SND_coll.bnk")).ok();
         let slot = |n: usize| -> Option<Arc<Clip>> {
             let d = coll.as_ref()?;
             let p = Bnk::parse(d).ok()?.decode_slot(d, n).ok()?;

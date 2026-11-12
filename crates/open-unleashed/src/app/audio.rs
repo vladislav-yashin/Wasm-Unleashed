@@ -615,5 +615,5 @@ pub(crate) fn crowding_factor(distances: impl IntoIterator<Item = f32>) -> u8 {
 /// that differs from launch to launch, which is all the picks use it for (the sum with
 /// 0x538040's draw, `|sum| % n`).
 pub(crate) fn tick_count_ms() -> u32 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u32)
+    nfs_platform::time::SystemTime::now().duration_since(nfs_platform::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u32)
 }

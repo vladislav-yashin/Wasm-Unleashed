@@ -45,7 +45,7 @@ struct Call {
 /// `AI`/`AO` pairs (the early exit — no block yet — has `+0x3C == 0` and is dropped) and the `SI`/`SO` pairs.
 fn load() -> Option<(Vec<Call>, Vec<(i32, Vec<u32>, Vec<u32>)>)> {
     let path = std::env::var("NFS_DEADRECK_TRACE").ok()?;
-    let text = std::fs::read_to_string(path).ok()?;
+    let text = nfs_platform::fs::read_to_string(path).ok()?;
     let sect = |l: &str, key: &str| -> Option<Vec<u32>> {
         let rest = l.split(&format!("{key} ")).nth(1)?;
         Some(words(rest.split('|').next()?))
@@ -248,7 +248,7 @@ fn the_apply_leaves_the_car_where_the_original_left_it() {
         eprintln!("skipping: no game data");
         return;
     };
-    if let Some((p, h)) = std::fs::read_to_string(std::env::var("NFS_DEADRECK_TRACE").unwrap()).ok().and_then(|t| trace_body(&t)) {
+    if let Some((p, h)) = nfs_platform::fs::read_to_string(std::env::var("NFS_DEADRECK_TRACE").unwrap()).ok().and_then(|t| trace_body(&t)) {
         (body_pts, body_half) = (p, h);
     }
     if let Some(sb) = calls.iter().find(|c| c.sb.contains_key("qspecs")).map(|c| &c.sb) {
@@ -406,7 +406,7 @@ fn the_stale_arm_decides_as_the_original_did() {
         eprintln!("skipping: no NFS_DEADRECK_TRACE");
         return;
     };
-    let Ok(text) = std::fs::read_to_string(path) else { return };
+    let Ok(text) = nfs_platform::fs::read_to_string(path) else { return };
     let Ok(paths) = nfs_assets::GamePaths::locate() else {
         eprintln!("skipping: no game data");
         return;
@@ -542,7 +542,7 @@ fn the_retrack_walk_stops_where_the_original_stopped() {
         eprintln!("skipping: no NFS_DEADRECK_TRACE");
         return;
     };
-    let Ok(text) = std::fs::read_to_string(path) else { return };
+    let Ok(text) = nfs_platform::fs::read_to_string(path) else { return };
     let Ok(paths) = nfs_assets::GamePaths::locate() else {
         eprintln!("skipping: no game data");
         return;
@@ -604,7 +604,7 @@ fn the_stores_snap_leaves_the_car_the_original_left() {
         eprintln!("skipping: no NFS_DEADRECK_TRACE");
         return;
     };
-    let Ok(text) = std::fs::read_to_string(path) else { return };
+    let Ok(text) = nfs_platform::fs::read_to_string(path) else { return };
     let Ok(paths) = nfs_assets::GamePaths::locate() else {
         eprintln!("skipping: no game data");
         return;
@@ -687,7 +687,7 @@ fn the_reseat_leaves_the_car_the_original_left() {
         eprintln!("skipping: no NFS_DEADRECK_TRACE");
         return;
     };
-    let Ok(text) = std::fs::read_to_string(path) else { return };
+    let Ok(text) = nfs_platform::fs::read_to_string(path) else { return };
     let Some(Env { grid, mut specs, mut body_pts, mut body_half, wheel_radius, table: _ }) = env() else {
         eprintln!("skipping: no game data");
         return;

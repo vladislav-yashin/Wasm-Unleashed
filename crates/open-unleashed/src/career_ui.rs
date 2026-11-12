@@ -3,6 +3,8 @@
 //!
 //! Rules and hypotheses are documented in `nfs_game::career`; this file only presents them.
 
+#[allow(unused_imports)]
+use nfs_platform::PathExt as _;
 use nfs_assets::GamePaths;
 use nfs_formats::career::{ConeRule, Mission, Part, Tournament};
 use nfs_formats::fedata::CarCatalogEntry;
@@ -99,7 +101,7 @@ impl MissionStart {
     /// record, so the record whose launch words (`nfs_game::replay::mission_words`) and scene equal the recorded
     /// ones is the mission the block described. `None` when no record matches (another install's file).
     pub fn from_replay_words(paths: &GamePaths, words: &[i32; 12], scene: Option<i16>) -> Option<Self> {
-        let data = std::fs::read(paths.fe_data().join("Data").join("nfs5.fac")).ok()?;
+        let data = nfs_platform::fs::read(paths.fe_data().join("Data").join("nfs5.fac")).ok()?;
         let missions = nfs_formats::career::parse_missions(&data).ok()?;
         let index = missions.iter().position(|m| nfs_game::replay::mission_words(m) == *words && scene.is_none_or(|s| s == m.scene))?;
         let mission = missions[index].clone();
@@ -1053,7 +1055,7 @@ impl CareerUi {
     /// write-only in both games (neither `career_from_sav` nor the original's own display ever
     /// reads `player_name` back — it always re-derives the shown name from the file stem).
     pub fn create_profile_from(&mut self, name: &str, picture: u8, template: &nfs_game::save::SaveSide) -> bool {
-        if (0..=9).any(|d| self.save_dir.join(format!("{d}{name}.sav")).exists()) {
+        if (0..=9).any(|d| self.save_dir.join(format!("{d}{name}.sav")).host_exists()) {
             return false;
         }
         let old = (std::mem::take(&mut self.career), self.profile.clone());
@@ -1848,6 +1850,8 @@ impl CareerUi {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use nfs_platform::PathExt as _;
     use super::*;
 
     /// **one load path**: start-up (`load_from`) and every front-end entry's reload
@@ -1861,8 +1865,8 @@ mod tests {
             return;
         };
         let dir = std::env::temp_dir().join(format!("nfs-onepath-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
+        nfs_platform::fs::create_dir_all(&dir).unwrap();
         let tables = CareerTables::load(&paths).unwrap();
         let car_id = tables.catalog.iter().find(|c| !c.sim.is_empty() && !c.paint_sets.is_empty()).unwrap().id;
         let mut c = Career::default();
@@ -1880,11 +1884,11 @@ mod tests {
         let mut v = serde_json::to_value(&c).unwrap();
         v["promotions_accepted"] = serde_json::json!([stage]);
         let json = dir.join("career.json");
-        std::fs::write(&json, serde_json::to_vec(&v).unwrap()).unwrap();
+        nfs_platform::fs::write(&json, serde_json::to_vec(&v).unwrap()).unwrap();
 
         let mut ui = CareerUi::load_from(&paths, dir.clone(), Some(&json)).unwrap();
         assert_eq!(ui.profile, p, "player.lst's profile");
-        assert!(!json.exists(), "migrated once");
+        assert!(!json.host_exists(), "migrated once");
         let started = ui.career.clone();
         assert_eq!(started.money, 77_777);
         assert_ne!(started.garage[0].parts, owned.parts, "the reversed list comes back sorted");
@@ -1894,7 +1898,7 @@ mod tests {
         assert_eq!(ui.career, started, "the front-end entry's reload is the start-up load");
         let again = CareerUi::load_from(&paths, dir.clone(), Some(&json)).unwrap();
         assert_eq!(again.career, started, "a restart too");
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
     }
 
     /// `CREATEPLAYERDONE` / `SETNAMETHENBACK` / `REMOVEPLAYER` over their three helpers:
@@ -1906,12 +1910,12 @@ mod tests {
             return;
         };
         let dir = std::env::temp_dir().join(format!("nfs-profiles-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
         let mut ui = CareerUi::load(&paths).unwrap();
         ui.save_dir = dir.clone();
         ui.career.money = 1;
         assert!(ui.create_profile("Hans", 8));
-        assert!(dir.join("8Hans.sav").exists());
+        assert!(dir.join("8Hans.sav").host_exists());
         assert_eq!(ui.career.money, 11_000, "the pristine career");
         assert!(!ui.create_profile("Hans", 3), "a taken name, whatever the picture");
         ui.career.money = 5;
@@ -1921,7 +1925,7 @@ mod tests {
         assert_eq!(nfs_game::save::read_player_lst(&dir).as_deref(), Some("8Hans"));
         nfs_game::save::delete_profile(&dir, &p).unwrap();
         assert!(!ui.switch_profile(&p), "806: nothing to load");
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
     }
 
     /// N03 / 0x4D3B4A: the first entry skips the profile load, so until the chooser is answered the
@@ -1934,7 +1938,7 @@ mod tests {
             return;
         };
         let dir = std::env::temp_dir().join(format!("nfs-firstentry-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
         let mut ui = CareerUi::load(&paths).unwrap();
         ui.save_dir = dir.clone();
         assert!(ui.create_profile("Hans", 8));
@@ -1947,7 +1951,7 @@ mod tests {
         assert!(ui.career.garage.is_empty());
         assert!(ui.switch_profile(&p), "continue");
         assert_eq!(ui.career.money, 42_000, "the profile after the answer");
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
     }
 
     /// 0x506AA0 / 0x4FD1A0: `Tournament.EventType` has one row per era reached, the club lists
@@ -1996,13 +2000,13 @@ mod tests {
             return;
         };
         let dir = std::env::temp_dir().join(format!("nfs-picture-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
         let mut ui = CareerUi::load(&paths).unwrap();
         ui.save_dir = dir.clone();
         assert!(ui.create_profile("Greta", 5));
         let file = dir.join("5Greta.sav");
-        assert!(file.exists());
-        let sav = nfs_formats::sav::SaveFile::parse(&std::fs::read(&file).unwrap()).unwrap();
+        assert!(file.host_exists());
+        let sav = nfs_formats::sav::SaveFile::parse(&nfs_platform::fs::read(&file).unwrap()).unwrap();
         assert_eq!(sav.player.as_ref().map(|p| p.picture), Some(5));
         // `savegame.md` "Genuine save 2026-09-28": the creation save is the one `SaveInfo` the
         // original makes before `[0x691DC8]` (`player_name`) is ever set to the typed name — the
@@ -2018,9 +2022,9 @@ mod tests {
         // the normal save path is unchanged: once the profile is loaded, a later save carries the
         // real name again, exactly as the original's own next `LoadInfo` does in memory
         ui.save();
-        let sav2 = nfs_formats::sav::SaveFile::parse(&std::fs::read(&file).unwrap()).unwrap();
+        let sav2 = nfs_formats::sav::SaveFile::parse(&nfs_platform::fs::read(&file).unwrap()).unwrap();
         assert_eq!(sav2.player.as_ref().map(|p| p.player_name.as_str()), Some("Greta"), "every later save is correct");
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
     }
 
     /// `Tournament`'s front-end dwords (`savegame.md` §4.3): the selected tournament `[0x691E6C]`
@@ -2034,7 +2038,7 @@ mod tests {
             return;
         };
         let dir = std::env::temp_dir().join(format!("nfs-tourfe-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
         let mut ui = CareerUi::load(&paths).unwrap();
         ui.save_dir = dir.clone();
         ui.career = Career::default();
@@ -2044,7 +2048,7 @@ mod tests {
         let table_index = ui.tables.tournaments.iter().position(|x| x.id == t.id).unwrap() as u32;
         ui.side.tournament.next_event = ui.career.remaining_event(&t, 1).unwrap() as u32;
         ui.save();
-        let sav = nfs_formats::sav::SaveFile::parse(&std::fs::read(ui.profile.path(&dir)).unwrap()).unwrap();
+        let sav = nfs_formats::sav::SaveFile::parse(&nfs_platform::fs::read(ui.profile.path(&dir)).unwrap()).unwrap();
         let tm = sav.tournament.as_ref().unwrap();
         assert_eq!(tm.selected, table_index);
         assert_eq!(tm.remaining_tracks, ui.side.tournament.next_event);
@@ -2060,10 +2064,10 @@ mod tests {
         ui.side.tournament.current_tournament = table_index as i32;
         ui.save();
         assert!(ui.pending.is_none(), "not turned back into a race");
-        let sav = nfs_formats::sav::SaveFile::parse(&std::fs::read(ui.profile.path(&dir)).unwrap()).unwrap();
+        let sav = nfs_formats::sav::SaveFile::parse(&nfs_platform::fs::read(ui.profile.path(&dir)).unwrap()).unwrap();
         let tm = sav.tournament.as_ref().unwrap();
         assert_eq!((tm.current_event, tm.current_tournament), (2, table_index as i32));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -2075,7 +2079,7 @@ mod tests {
         let mut ui = CareerUi::load(&paths).unwrap();
         // the profile's `.sav` and `player.lst` go to a scratch dir, never the real save dir
         let dir = std::env::temp_dir().join(format!("nfs-career-ui-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
         ui.save_dir = dir.clone();
         ui.career = Career::default();
         assert_eq!(ui.career.money, 11_000);
@@ -2171,7 +2175,7 @@ mod tests {
         ui.save();
         let caught_up = load(&ui);
         assert_eq!((caught_up.money, caught_up.garage[0].mileage, caught_up.state(1).events.len()), (ui.career.money, 3000, 1));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
     }
 
     /// `0x4EBDA0` reads a tournament/finale opponent's `.RACENUMBER` straight out of the table

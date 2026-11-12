@@ -28,7 +28,7 @@ use nfs_net::state::{CarState, TICK_MASK};
 use nfs_physics::vehicle::Vehicle;
 use std::collections::{HashMap, VecDeque};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, ToSocketAddrs};
-use std::time::{Duration, Instant};
+use nfs_platform::time::{Duration, Instant};
 
 mod barrier;
 mod cars;
@@ -69,7 +69,7 @@ pub fn game_version() -> String {
     let paths = nfs_assets::paths::GamePaths::locate().ok();
     let file = paths
         .as_ref()
-        .and_then(|p| std::fs::read(p.root.join("version.txt")).ok())
+        .and_then(|p| nfs_platform::fs::read(p.root.join("version.txt")).ok())
         .map(|b| b.into_iter().take(5).take_while(|&c| c != 0).map(|c| c as char).collect::<String>())
         .filter(|v| !v.is_empty());
     let reg = paths.map(|p| p.registry());

@@ -148,7 +148,7 @@ impl Bridge {
 
 /// The frames still queued `since` the callback that left `frames` for the device, as 0x58F5D0
 /// answers them: `frames · 1000 / rate`, toward zero, never below 0.
-pub fn latency_ms(frames: u64, since: std::time::Duration, rate: u32) -> i32 {
+pub fn latency_ms(frames: u64, since: nfs_platform::time::Duration, rate: u32) -> i32 {
     let gone = (since.as_secs_f64() * rate as f64) as u64;
     (frames.saturating_sub(gone) * 1000 / rate.max(1) as u64) as i32
 }
@@ -163,7 +163,7 @@ pub fn played_ms(frames: u64, rate: u32) -> i32 {
 mod position_tests {
     #[test]
     fn the_latency_is_what_is_queued_and_not_yet_heard() {
-        use std::time::Duration;
+        use nfs_platform::time::Duration;
         // 1024 frames of buffer and 1024 of device delay at 48 kHz: 42 ms, toward zero
         assert_eq!(super::latency_ms(2048, Duration::ZERO, 48000), 42);
         // 10 ms later 480 frames have gone

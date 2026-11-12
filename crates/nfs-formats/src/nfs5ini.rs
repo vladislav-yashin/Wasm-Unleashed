@@ -107,7 +107,7 @@ impl Nfs5Ini {
     /// Read `<dir>/nfs5.ini` (the exe's directory); a missing or unreadable file gives the defaults.
     pub fn load(dir: &std::path::Path) -> Self {
         let Some(p) = crate::ci_file::find_file(dir, "nfs5.ini") else { return Self::default() };
-        std::fs::read(p).map(|b| Self::parse(&String::from_utf8_lossy(&b))).unwrap_or_default()
+        nfs_platform::fs::read(p).map(|b| Self::parse(&String::from_utf8_lossy(&b))).unwrap_or_default()
     }
 }
 

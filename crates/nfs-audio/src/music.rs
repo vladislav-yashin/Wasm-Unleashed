@@ -7,6 +7,8 @@
 //! name starts with `win`, `lose` or `vic` plays at the raw music level rather than the 0..80 scale,
 //! which makes the jingles noticeably louder (0x4ADBF9).
 
+#[allow(unused_imports)]
+use nfs_platform::PathExt as _;
 use crate::mixer::{AudioOutput, StreamSource, VoiceId};
 use nfs_formats::{bigf::BigfEntry, bytes::read_u32_be, schl::SchlStream};
 use std::io::{Read, Seek, SeekFrom};
@@ -16,6 +18,7 @@ pub struct Music {
     pub voice: VoiceId,
     pub title: String,
     src: std::sync::Arc<StreamSource>,
+    #[cfg(not(target_arch = "wasm32"))]
     _thread: std::thread::JoinHandle<()>,
 }
 
@@ -39,7 +42,7 @@ impl Drop for Music {
 /// song start). Same table as [`nfs_formats::bigf::Bigf::parse`] walks (`+8` count, `+12` header
 /// size, then `{u32 BE offset, u32 BE size, NUL-terminated name}`), the entries checked against
 /// the file's length.
-fn viv_directory(file: &mut std::fs::File) -> anyhow::Result<Vec<BigfEntry>> {
+fn viv_directory(file: &mut nfs_platform::fs::File) -> anyhow::Result<Vec<BigfEntry>> {
     let len = file.metadata()?.len();
     let mut head = [0u8; 16];
     file.read_exact(&mut head)?;
@@ -67,8 +70,8 @@ fn viv_directory(file: &mut std::fs::File) -> anyhow::Result<Vec<BigfEntry>> {
 }
 
 /// The entry directory of `<music_dir>/zzzymus.viv` and the file, still open.
-fn open_viv(music_dir: &Path) -> anyhow::Result<(std::fs::File, Vec<BigfEntry>)> {
-    let mut file = std::fs::File::open(music_dir.join(MUSIC_VIV))?;
+fn open_viv(music_dir: &Path) -> anyhow::Result<(nfs_platform::fs::File, Vec<BigfEntry>)> {
+    let mut file = nfs_platform::fs::File::open(music_dir.join(MUSIC_VIV))?;
     let entries = viv_directory(&mut file)?;
     Ok((file, entries))
 }
@@ -935,16 +938,28 @@ impl Music {
     pub fn play(out: &AudioOutput, music_dir: &Path, index: usize, volume: f32) -> anyhow::Result<Self> {
         let (mut file, entries) = open_viv(music_dir)?;
         let entry = entries.get(index).ok_or_else(|| anyhow::anyhow!("song index {index} out of range"))?.clone();
-        // only this song's bytes, not the whole archive
-        let mut bytes = vec![0u8; entry.size as usize];
-        file.seek(SeekFrom::Start(entry.offset as u64))?;
-        file.read_exact(&mut bytes)?;
-        let stream = SchlStream::parse(&bytes)?;
-        let (rate, channels) = (stream.header.sample_rate, stream.header.channels);
+        #[cfg(not(target_arch = "wasm32"))]
+        let (bytes, rate, channels) = {
+            let mut bytes = vec![0u8; entry.size as usize];
+            file.seek(SeekFrom::Start(entry.offset as u64))?;
+            file.read_exact(&mut bytes)?;
+            let stream = SchlStream::parse(&bytes)?;
+            let (rate, channels) = (stream.header.sample_rate, stream.header.channels);
+            (bytes, rate, channels)
+        };
+        #[cfg(target_arch = "wasm32")]
+        let (rate, channels) = {
+            file.seek(SeekFrom::Start(entry.offset as u64))?;
+            let mut bytes = vec![0u8; (entry.size as usize).min(1024)];
+            file.read_exact(&mut bytes)?;
+            let header = nfs_formats::bnk::PtHeader::parse(&bytes, 8)?;
+            (header.sample_rate, header.channels)
+        };
         let src = StreamSource::new(rate, channels);
         let voice = out.play_stream(src.clone(), volume);
         let title = entry.name.clone();
         let feeder = src.clone();
+        #[cfg(not(target_arch = "wasm32"))]
         let thread = std::thread::spawn(move || {
             let stream = match SchlStream::parse(&bytes) {
                 Ok(s) => s,
@@ -969,17 +984,59 @@ impl Music {
                     if abandoned(&feeder) {
                         return;
                     }
-                    std::thread::sleep(std::time::Duration::from_millis(FEED_WAIT_MS));
+                    std::thread::sleep(nfs_platform::time::Duration::from_millis(FEED_WAIT_MS));
                 }
             }
             feeder.finished.store(true, std::sync::atomic::Ordering::Release);
         });
-        Ok(Self { voice, title, src, _thread: thread })
+        #[cfg(target_arch = "wasm32")]
+        let music_path = music_dir.join(MUSIC_VIV).to_string_lossy().into_owned();
+        #[cfg(target_arch = "wasm32")]
+        wasm_bindgen_futures::spawn_local(async move {
+            let bytes = match nfs_platform::read_range_async(&music_path, entry.offset, entry.size).await {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    tracing::warn!(%error, "music download failed");
+                    feeder.finished.store(true, std::sync::atomic::Ordering::Release);
+                    return;
+                }
+            };
+            let stream = match SchlStream::parse(&bytes) {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+            // nobody plays this stream any more: its `Music` was dropped (cancelled), or the mixer
+            // let go of the voice and `Music` is gone too (only this handle is left)
+            let abandoned = |f: &std::sync::Arc<StreamSource>| f.is_cancelled() || std::sync::Arc::strong_count(f) == 1;
+            for block in stream.blocks(&bytes) {
+                if abandoned(&feeder) {
+                    return;
+                }
+                let Ok(block) = block else { break };
+                let nfs_formats::schl::Block::Data(block) = block else { continue };
+                let mut pcm = Vec::new();
+                if block.decode_into(&mut pcm).is_err() {
+                    break;
+                }
+                feeder.push(&pcm);
+                // keep ~2 s buffered ahead
+                while feeder.queued_frames() > rate as usize * 2 {
+                    if abandoned(&feeder) {
+                        return;
+                    }
+                    nfs_platform::delay(FEED_WAIT_MS as u32).await;
+                }
+            }
+            feeder.finished.store(true, std::sync::atomic::Ordering::Release);
+        });
+        Ok(Self { voice, title, src, #[cfg(not(target_arch = "wasm32"))] _thread: thread })
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use nfs_platform::PathExt as _;
     use super::*;
 
     /// A bare `MusicPlayer` with no on-disk `zzzymus.viv` (bypassing `MusicPlayer::new`'s file
@@ -1618,15 +1675,15 @@ mod feeder {
 
     fn scratch(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("nfs-music-{tag}-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        nfs_platform::fs::create_dir_all(&dir).unwrap();
         dir
     }
 
     fn wait_for(what: &str, mut ok: impl FnMut() -> bool) {
-        let t = std::time::Instant::now();
+        let t = nfs_platform::time::Instant::now();
         while !ok() {
-            assert!(t.elapsed() < std::time::Duration::from_secs(5), "timed out: {what}");
-            std::thread::sleep(std::time::Duration::from_millis(5));
+            assert!(t.elapsed() < nfs_platform::time::Duration::from_secs(5), "timed out: {what}");
+            std::thread::sleep(nfs_platform::time::Duration::from_millis(5));
         }
     }
 
@@ -1635,20 +1692,20 @@ mod feeder {
         let dir = scratch("dir");
         let a = song(100, 3);
         let b = vec![7u8; 1000];
-        std::fs::write(dir.join(MUSIC_VIV), viv(&[("game00-A-B", a.clone()), ("win1", b.clone())])).unwrap();
+        nfs_platform::fs::write(dir.join(MUSIC_VIV), viv(&[("game00-A-B", a.clone()), ("win1", b.clone())])).unwrap();
         assert_eq!(song_titles(&dir).unwrap(), ["game00-A-B", "win1"]);
         assert_eq!(song_lengths_ms(&dir).unwrap(), [((a.len() as u64 * 10) / 348) as u32, ((b.len() as u64 * 10) / 348) as u32]);
         // the same table the format crate's parser reads
-        let data = std::fs::read(dir.join(MUSIC_VIV)).unwrap();
+        let data = nfs_platform::fs::read(dir.join(MUSIC_VIV)).unwrap();
         let full = nfs_formats::bigf::Bigf::parse(&data).unwrap();
         let (_, head) = open_viv(&dir).unwrap();
         assert_eq!(head, full.entries);
         // a cut file refuses, a wrong magic refuses
-        std::fs::write(dir.join(MUSIC_VIV), &data[..data.len() - 10]).unwrap();
+        nfs_platform::fs::write(dir.join(MUSIC_VIV), &data[..data.len() - 10]).unwrap();
         assert!(song_titles(&dir).is_err());
-        std::fs::write(dir.join(MUSIC_VIV), b"BIGX0000000000000000").unwrap();
+        nfs_platform::fs::write(dir.join(MUSIC_VIV), b"BIGX0000000000000000").unwrap();
         assert!(song_titles(&dir).is_err());
-        std::fs::remove_dir_all(&dir).unwrap();
+        nfs_platform::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// A song that was started and stopped leaves no thread behind: after the player lets go of
@@ -1656,7 +1713,7 @@ mod feeder {
     #[test]
     fn a_stopped_song_frees_its_feeder() {
         let dir = scratch("feed");
-        std::fs::write(dir.join(MUSIC_VIV), viv(&[("game00-A-B", song(100, 40))])).unwrap();
+        nfs_platform::fs::write(dir.join(MUSIC_VIV), viv(&[("game00-A-B", song(100, 40))])).unwrap();
         let out = AudioOutput::offline();
         for _ in 0..20 {
             let m = Music::play(&out, &dir, 0, 0.0).unwrap();
@@ -1671,19 +1728,19 @@ mod feeder {
             });
         }
         assert!(Music::play(&out, &dir, 1, 0.0).is_err(), "a song index past the archive");
-        std::fs::remove_dir_all(&dir).unwrap();
+        nfs_platform::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// A song nobody drops still plays out: the feeder finishes and sets `finished`.
     #[test]
     fn a_song_that_plays_on_is_fed_to_its_end() {
         let dir = scratch("end");
-        std::fs::write(dir.join(MUSIC_VIV), viv(&[("game00-A-B", song(100, 4))])).unwrap();
+        nfs_platform::fs::write(dir.join(MUSIC_VIV), viv(&[("game00-A-B", song(100, 4))])).unwrap();
         let out = AudioOutput::offline();
         let m = Music::play(&out, &dir, 0, 0.0).unwrap();
         wait_for("the feeder reaches the end", || m.src.finished.load(std::sync::atomic::Ordering::Acquire));
         assert_eq!(m.src.queued_frames(), 4 * 28);
-        std::fs::remove_dir_all(&dir).unwrap();
+        nfs_platform::fs::remove_dir_all(&dir).unwrap();
     }
 }
 
@@ -1697,7 +1754,7 @@ mod real_data {
         }
         let home = PathBuf::from(std::env::var_os("HOME")?);
         let p = home.join("Games/NFS-Porsche-Unleashed/game_info/data");
-        p.join("GameData").is_dir().then_some(p)
+        p.join("GameData").host_is_dir().then_some(p)
     }
 
     /// The "все треки" total, against the genuine capture (`pass6_options_audio.jpg`, 35:46) —
@@ -1726,7 +1783,7 @@ mod real_data {
             return;
         };
         let dir = root.join("GameData/Music");
-        let data = std::fs::read(dir.join(MUSIC_VIV)).unwrap();
+        let data = nfs_platform::fs::read(dir.join(MUSIC_VIV)).unwrap();
         let full = nfs_formats::bigf::Bigf::parse(&data).unwrap();
         let (mut file, head) = open_viv(&dir).unwrap();
         assert_eq!(head, full.entries);
@@ -1769,7 +1826,7 @@ mod real_data {
                 && c.src.queued_frames() < 4096
                 && !c.src.finished.load(std::sync::atomic::Ordering::Acquire)
             {
-                std::thread::sleep(std::time::Duration::from_millis(1));
+                std::thread::sleep(nfs_platform::time::Duration::from_millis(1));
                 continue;
             }
             tick(&out);

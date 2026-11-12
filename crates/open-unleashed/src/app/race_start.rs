@@ -472,6 +472,18 @@ impl App {
     }
 
     pub(crate) fn start_from_layout(&mut self, event_loop: &ActiveEventLoop) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            // Gate before any career/series mutation. Multi-event modes preload all tracks
+            // so subsequent round transitions remain synchronous and deterministic.
+            let track = if self.fe.game_type == game_type::QUICK_KNOCKOUT {
+                self.fe.menu.as_ref().map(|m| m.looped_track().to_string()).unwrap_or_default()
+            } else if self.fe.game_type == 0 {
+                self.fe.menu.as_ref().map(|m| m.track().to_string()).unwrap_or_default()
+            } else { String::new() };
+            if !crate::web::prepare_track(&track) { return; }
+        }
+
         // `Game.GameType` 10 — `VictoryRoom`'s `PLAYGAME` — is the era finale (0x4D5730's type-10
         // arm to the launch, `CareerUi::start_finale`). *(Until 2026-09-27 the port ran the quick
         // race's single race here, so the finale could not be raced from the layout front end.)*
@@ -906,7 +918,7 @@ impl App {
         );
         // **`srand(time(0))`** (0x418100, `HMissionSummary`'s constructor — a race load): the C
         // runtime's state for everything up to the next race load
-        self.crt_rand = nfs_game::movie_overlay::CRand::new(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.as_secs() as u32));
+        self.crt_rand = nfs_game::movie_overlay::CRand::new(nfs_platform::time::SystemTime::now().duration_since(nfs_platform::time::UNIX_EPOCH).map_or(1, |d| d.as_secs() as u32));
         if self.net.session.is_some() {
             let time = self.net_launch.fe_txt.get("time").copied().unwrap_or_else(|| self.registry.u32("time", 0));
             tracing::info!(target: "netplay", rand_seed = self.traffic_seed, time, weather = 0, car_car_pass_skipped = self.net_launch.nocollision, "network race: the option values in force (0x414EE9 RAND_SEED, TIME; WEATHER is stored 0 by 0x414DF9; 0x498FF0's car-car half skipped when COMMSPOSITIONAL && NOCOLLISION)");
@@ -920,7 +932,7 @@ impl App {
         // the HUD folder posted as file type 0, for the others' `HLeader` and their loading screen's
         // rows (the port posted it with the seats, after step 5)
         if let Some(n) = self.net.session.as_mut()
-            && let Some(b) = GamePaths::find_file(&self.paths.game_data().join("DashHud"), "pic16.fsh").and_then(|p| std::fs::read(p).ok())
+            && let Some(b) = GamePaths::find_file(&self.paths.game_data().join("DashHud"), "pic16.fsh").and_then(|p| nfs_platform::fs::read(p).ok())
         {
             n.post_picture(&b);
         }
@@ -962,7 +974,7 @@ impl App {
         self.car.tiny = self.cheat_bits & CHEAT_TINY != 0;
         // the driven car's catalogue record gives the stripe and interior colours that go with
         // the paint (0x443DB0, `car-model.md` §5.0a)
-        let player_paint = nfs_formats::fedata::parse_car_catalog(&std::fs::read(self.paths.fe_data().join("Data").join("nfs5.car")).unwrap_or_default())
+        let player_paint = nfs_formats::fedata::parse_car_catalog(&nfs_platform::fs::read(self.paths.fe_data().join("Data").join("nfs5.car")).unwrap_or_default())
             .unwrap_or_default()
             .iter()
             .find(|c| c.sim.eq_ignore_ascii_case(&self.sim_name) && c.model.eq_ignore_ascii_case(&self.car.model))
@@ -1048,7 +1060,7 @@ impl App {
         // it. `NFS_FE_TIME=<seconds>` pins `time(0)` (diagnostic).
         if !race_pass {
             let t = nfs_game::config::cfg().nfs_fe_time.as_str().and_then(|v| v.trim().parse::<u32>().ok()).unwrap_or_else(|| {
-                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as u32)
+                nfs_platform::time::SystemTime::now().duration_since(nfs_platform::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as u32)
             });
             self.fe_rng = nfs_game::opponents::FeRng::new(t);
         }
@@ -1097,7 +1109,7 @@ impl App {
         // **`srand(time(0))`** (0x418100, `H321Go`'s constructor, built with the HUD after the cars):
         // the shared state the front end draws from after this race — the next opponents' rolls
         // (0x4F4FA0), the market, the glints
-        nfs_game::layout::glints::crt_srand(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.as_secs() as u32));
+        nfs_game::layout::glints::crt_srand(nfs_platform::time::SystemTime::now().duration_since(nfs_platform::time::UNIX_EPOCH).map_or(1, |d| d.as_secs() as u32));
         if let Some(h) =
             world
                 .collision
@@ -1334,7 +1346,7 @@ impl App {
         // the dash needles' calibration, off the player's `nfs5.car` record (the same pick as the
         // grid's: the chosen car id, else the model's first record with a sim)
         let catalog = nfs_formats::fedata::parse_car_catalog(
-            &std::fs::read(self.paths.fe_data().join("Data").join("nfs5.car")).unwrap_or_default(),
+            &nfs_platform::fs::read(self.paths.fe_data().join("Data").join("nfs5.car")).unwrap_or_default(),
         )
         .unwrap_or_default();
         if let Some(e) = self

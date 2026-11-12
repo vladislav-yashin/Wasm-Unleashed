@@ -118,7 +118,7 @@ pub fn load_strings(paths: &GamePaths) -> Strings {
     // 0x4E0586: 7 and above fold to 0 (0x4B73F0 answers 0…6, so the fold never acts)
     let lang = if raw >= 7 { 0 } else { raw };
     let table = |dir: std::path::PathBuf, name: &str| {
-        let mut t = nfs_formats::loc::LocTable::parse(std::fs::read(GamePaths::find_file(&dir, name)?).ok()?).ok()?;
+        let mut t = nfs_formats::loc::LocTable::parse(nfs_platform::fs::read(GamePaths::find_file(&dir, name)?).ok()?).ok()?;
         t.set_language(lang);
         Some(t)
     };
@@ -127,7 +127,7 @@ pub fn load_strings(paths: &GamePaths) -> Strings {
         return Strings::from_loc(&fe, hud.as_ref());
     }
     tracing::warn!("no FEStrings.loc: falling back to FEStrings.csv");
-    let csv = GamePaths::find_file(&paths.fe_data().join("Locale"), "FEStrings.csv").and_then(|p| std::fs::read(p).ok());
+    let csv = GamePaths::find_file(&paths.fe_data().join("Locale"), "FEStrings.csv").and_then(|p| nfs_platform::fs::read(p).ok());
     let mut s = csv.map(|b| Strings::parse(&b, lang as usize)).unwrap_or_default();
     if let Some(h) = &hud {
         s.hud_by_id = Strings::from_loc(h, None).fe_by_id;
@@ -140,7 +140,7 @@ pub fn load_strings(paths: &GamePaths) -> Strings {
 /// and the pieces each class is made of (`RE/notes/controls.md`).
 pub fn load_controls(paths: &GamePaths) -> ControlLibrary {
     let dir = paths.fe_data().join("Controls");
-    let Ok(entries) = std::fs::read_dir(&dir) else {
+    let Ok(entries) = nfs_platform::fs::read_dir(&dir) else {
         tracing::debug!(dir = %dir.display(), "no control templates");
         return ControlLibrary::default();
     };
@@ -149,7 +149,7 @@ pub fn load_controls(paths: &GamePaths) -> ControlLibrary {
     // layout's `[section.0]` carries. It has the same shape as a `.ctr` and the port used to skip
     // it, so the one class that every screen is built on had no template at all here.
     let files = entries.filter_map(|e| e.ok()).filter(|e| e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("ctr") || x.eq_ignore_ascii_case("scr"))).filter_map(|e| {
-        let bytes = std::fs::read(e.path()).ok()?;
+        let bytes = nfs_platform::fs::read(e.path()).ok()?;
         Some(bytes.iter().map(|&b| nfs_formats::locale::cp1252(b)).collect::<String>())
     });
     let lib = ControlLibrary::from_files(files);
@@ -1238,7 +1238,7 @@ impl LayoutScreen {
         // is not already there. Both spellings ship — `filename=audio` and `filename=gearratio.lay`.
         let file = if name.to_ascii_lowercase().contains(".lay") { name.to_string() } else { format!("{name}.lay") };
         let path = GamePaths::find_file(&dir, &file).ok_or_else(|| anyhow::anyhow!("no layout {file} in {}", dir.display()))?;
-        let bytes = std::fs::read(&path)?;
+        let bytes = nfs_platform::fs::read(&path)?;
         let text: String = bytes.iter().map(|&b| nfs_formats::locale::cp1252(b)).collect();
         let layout = Layout::parse(&text);
 
@@ -1440,7 +1440,7 @@ impl LayoutScreen {
         // 0x523105, the typewriter's leading letter) look up the same entry.
         let glint = layout.elements.iter().any(|e| matches!(e.class.as_str(), "NFS5.HEADER" | "NFS5.CarLogo" | "NFS5.BOTTOMBARBUTTON") || e.class.to_ascii_lowercase().contains("wordwrap")).then(|| {
             let p = GamePaths::find_file(art, "weeicons.fsh")?;
-            let d = std::fs::read(p).ok()?;
+            let d = nfs_platform::fs::read(p).ok()?;
             let pack = nfs_formats::fsh::Fsh::parse(&d).ok()?;
             let n = pack.entries.iter().position(|e| e.name.trim_end_matches('\0').eq_ignore_ascii_case("GLNT"))?;
             wanted.push(("weeicons.fsh".to_string(), n));
@@ -1457,7 +1457,7 @@ impl LayoutScreen {
             .any(|e| matches!(e.class.as_str(), "NFS5.ComboBoxSlider" | "NFS5.ColorBox"))
             .then(|| {
                 let p = GamePaths::find_file(art, "weeicons.fsh")?;
-                let d = std::fs::read(p).ok()?;
+                let d = nfs_platform::fs::read(p).ok()?;
                 let pack = nfs_formats::fsh::Fsh::parse(&d).ok()?;
                 let at = |tag: &str| pack.entries.iter().position(|e| e.name.trim_end_matches('\0').eq_ignore_ascii_case(tag));
                 let six = [at("ARup")?, at("ARov")?, at("ARin")?, at("A2up")?, at("A2ov")?, at("A2in")?];
@@ -1472,7 +1472,7 @@ impl LayoutScreen {
         // (`RE/notes/controls.md` §4.47, §4.48)
         let colb = layout.elements.iter().any(|e| e.class == "NFS5.ColorBox").then(|| {
             let p = GamePaths::find_file(art, "weeicons.fsh")?;
-            let d = std::fs::read(p).ok()?;
+            let d = nfs_platform::fs::read(p).ok()?;
             let pack = nfs_formats::fsh::Fsh::parse(&d).ok()?;
             let n = pack.entries.iter().position(|e| e.name.trim_end_matches('\0').eq_ignore_ascii_case("COLB"))?;
             wanted.push(("weeicons.fsh".to_string(), n));
@@ -1483,7 +1483,7 @@ impl LayoutScreen {
         // index (`pls1`=3, `min4`=0xB, `pls2`=4, `pls3`=5 — see the field doc above)
         let parts_glyphs = layout.elements.iter().any(|e| e.get("accessor").is_some_and(|a| a.starts_with("Parts.AllParts"))).then(|| {
             let p = GamePaths::find_file(art, "weeicons.fsh")?;
-            let d = std::fs::read(p).ok()?;
+            let d = nfs_platform::fs::read(p).ok()?;
             let pack = nfs_formats::fsh::Fsh::parse(&d).ok()?;
             let at = |tag: &str| pack.entries.iter().position(|e| e.name.trim_end_matches('\0').eq_ignore_ascii_case(tag));
             let four = [at("pls1")?, at("min4")?, at("pls2")?, at("pls3")?];
@@ -1494,7 +1494,7 @@ impl LayoutScreen {
         }).flatten();
         let arcs = layout.elements.iter().any(|e| e.class == "NFS5.CONTROLLERSETUP").then(|| {
             let p = GamePaths::find_file(art, "weeicons.fsh")?;
-            let d = std::fs::read(p).ok()?;
+            let d = nfs_platform::fs::read(p).ok()?;
             let pack = nfs_formats::fsh::Fsh::parse(&d).ok()?;
             let mut arcs = [0; 8];
             for (k, a) in arcs.iter_mut().enumerate() {
@@ -1545,7 +1545,7 @@ impl LayoutScreen {
             }
             let entry = packs.entry(file.to_string()).or_insert_with(|| {
                 GamePaths::find_file(art, file)
-                    .and_then(|p| std::fs::read(&p).ok().map(|d| (p, d)))
+                    .and_then(|p| nfs_platform::fs::read(&p).ok().map(|d| (p, d)))
                     .and_then(|(p, d)| decode_pack(&p, &d).ok())
                     .unwrap_or_default()
             });
@@ -1623,7 +1623,7 @@ impl LayoutScreen {
                 tracing::debug!(name, "layout font missing");
                 continue;
             };
-            match std::fs::read(&path).ok().and_then(|d| nfs_formats::fnt::Font::parse(&d).ok()) {
+            match nfs_platform::fs::read(&path).ok().and_then(|d| nfs_formats::fnt::Font::parse(&d).ok()) {
                 Some(f) => {
                     fonts.insert(name, BitmapFont::upload(r, f));
                 }
@@ -2164,7 +2164,7 @@ impl LayoutScreen {
         if !self.shapes.contains_key(&key) {
             let dir = paths.fe_data().join(dir);
             let entries = GamePaths::find_file(&dir, file)
-                .and_then(|p| std::fs::read(&p).ok().map(|d| (p, d)))
+                .and_then(|p| nfs_platform::fs::read(&p).ok().map(|d| (p, d)))
                 .and_then(|(p, d)| decode_pack(&p, &d).ok())
                 .unwrap_or_default();
             let Some(img) = entries.get(entry) else {
@@ -2188,7 +2188,7 @@ impl LayoutScreen {
         }
         let dir = paths.fe_data().join(dir);
         let entries = GamePaths::find_file(&dir, file)
-            .and_then(|p| std::fs::read(&p).ok().map(|d| (p, d)))
+            .and_then(|p| nfs_platform::fs::read(&p).ok().map(|d| (p, d)))
             .and_then(|(p, d)| decode_pack(&p, &d).ok())
             .unwrap_or_default();
         let Some(img) = entries.get(entry) else { return };
@@ -2529,7 +2529,7 @@ impl LayoutScreen {
         let mut out = Vec::with_capacity(events.len());
         for ev in events {
             let entries = GamePaths::find_file(&dir, &format!("{}.fsh", ev.art))
-                .and_then(|p| std::fs::read(&p).ok().map(|d| (p, d)))
+                .and_then(|p| nfs_platform::fs::read(&p).ok().map(|d| (p, d)))
                 .and_then(|(p, d)| decode_pack(&p, &d).ok())
                 .unwrap_or_default();
             let mut upload = |k: usize| -> Option<(TextureId, f32, f32, f32, f32)> {
@@ -2573,7 +2573,7 @@ impl LayoutScreen {
             }
             let dir = paths.fe_data().join("Art");
             let Some(img) = GamePaths::find_file(&dir, LICENSE_SHADOW)
-                .and_then(|p| std::fs::read(&p).ok().map(|d| (p, d)))
+                .and_then(|p| nfs_platform::fs::read(&p).ok().map(|d| (p, d)))
                 .and_then(|(p, d)| decode_pack(&p, &d).ok())
                 .and_then(|v| v.into_iter().nth(entry))
             else {
@@ -2611,7 +2611,7 @@ impl LayoutScreen {
         if !self.shapes.contains_key(&(file.to_string(), CHRONICLE_MOSAIC_ENTRY)) {
             let dir = paths.fe_data().join("Chron");
             let entries = GamePaths::find_file(&dir, file)
-                .and_then(|p| std::fs::read(&p).ok().map(|d| (p, d)))
+                .and_then(|p| nfs_platform::fs::read(&p).ok().map(|d| (p, d)))
                 .and_then(|(p, d)| decode_pack(&p, &d).ok())
                 .unwrap_or_default();
             // The picture is a **grid**, and `FEChroniclePicture::draw` (0x508310) measures it:
@@ -2694,7 +2694,7 @@ impl LayoutScreen {
         if !self.shapes.contains_key(&(file.clone(), base)) {
             let art = paths.fe_data().join("Art");
             let images = GamePaths::find_file(&art, &file)
-                .and_then(|p| std::fs::read(&p).ok().map(|d| (p, d)))
+                .and_then(|p| nfs_platform::fs::read(&p).ok().map(|d| (p, d)))
                 .and_then(|(p, d)| decode_pack(&p, &d).ok())
                 .unwrap_or_default();
             for entry in [base, base + 1] {

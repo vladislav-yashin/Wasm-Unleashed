@@ -211,12 +211,12 @@ pub fn profile_paths(dir: &Path, name: &str) -> (PathBuf, PathBuf) {
 pub fn load(profile: Option<(&Path, &str)>, shipped_dir: &Path) -> Option<(HudCfg, bool)> {
     let read = |own: Option<PathBuf>, shipped: &str| -> Option<(Vec<u8>, bool)> {
         if let Some(p) = own
-            && let Ok(d) = std::fs::read(&p)
+            && let Ok(d) = nfs_platform::fs::read(&p)
             && !d.is_empty()
         {
             return Some((d, true));
         }
-        std::fs::read(shipped_dir.join(shipped)).ok().map(|d| (d, false))
+        nfs_platform::fs::read(shipped_dir.join(shipped)).ok().map(|d| (d, false))
     };
     let (p1, p2) = match profile {
         Some((dir, name)) => {
@@ -232,10 +232,10 @@ pub fn load(profile: Option<(&Path, &str)>, shipped_dir: &Path) -> Option<(HudCf
 
 /// 0x41EA50: write both tables to the profile's files.
 pub fn save(cfg: &HudCfg, dir: &Path, name: &str) -> std::io::Result<()> {
-    std::fs::create_dir_all(dir)?;
+    nfs_platform::fs::create_dir_all(dir)?;
     let (p1, p2) = profile_paths(dir, name);
-    std::fs::write(p1, &cfg.cfg1[..cfg.count() * CFG1_REC])?;
-    std::fs::write(p2, &cfg.cfg2[..cfg.count() * CFG2_REC])
+    nfs_platform::fs::write(p1, &cfg.cfg1[..cfg.count() * CFG1_REC])?;
+    nfs_platform::fs::write(p2, &cfg.cfg2[..cfg.count() * CFG2_REC])
 }
 
 #[cfg(test)]
@@ -338,7 +338,7 @@ mod tests {
         let (back, from_profile) = load(Some((&dir, "DRIVER")), &dir).unwrap();
         assert!(from_profile);
         assert_eq!(back, c);
-        std::fs::remove_dir_all(&dir).ok();
+        nfs_platform::fs::remove_dir_all(&dir).ok();
     }
 
     /// N01a: an existing record's positions are read from the fields 0x41FB40 reads (cfg1 `+0x188…`,

@@ -11,12 +11,14 @@
 //! that way; a `'='` with an empty payload is still the keep-alive, exactly as the original tells
 //! the two apart.
 
+#[allow(unused_imports)]
+use nfs_platform::PathExt as _;
 use crate::comm::{self, tag, CommError, Describe, Join, JoinReply, JoinStatus};
 use crate::socket::{addr_of, record_of, CommSocket};
 use crate::wire::Addr;
 use std::io;
 use std::net::SocketAddr;
-use std::time::{Duration, Instant};
+use nfs_platform::time::{Duration, Instant};
 
 /// A send whose failure the port has always ignored (UDP: the reliable layer resends, the peer re-asks, the next
 /// ping comes; how the original treats a failed `sendto` is not read): the error is only written to the debug log.
@@ -172,7 +174,7 @@ pub struct Net {
     pub conns: std::collections::BTreeMap<SocketAddr, crate::reliable::Conn>,
     /// The origin of the 128 Hz tick clock the connections' timers run on (glue: the original's
     /// `[0x6B7C7C]` is the multimedia timer's counter).
-    epoch: std::time::Instant,
+    epoch: nfs_platform::time::Instant,
     /// Host only: the game's gate on a joiner, which the original runs as the callback `conn[0x1C]+0x4C`
     /// (0x588EBF…0x588ED3, refusing with `-3`) — 0x48A700's version check (the identity's second
     /// field against `"3.5"`, 0x5D06FC): the version this host answers to. A joiner whose identity
@@ -216,7 +218,7 @@ impl Net {
             conns: std::collections::BTreeMap::new(),
             outbox: crate::outbox::Outbox::new(),
             // det-allow: transport timeouts, not simulation state
-            epoch: std::time::Instant::now(),
+            epoch: nfs_platform::time::Instant::now(),
             alive: comm::ALIVE_TICKS,
             ping: comm::PING_TICKS,
         }
@@ -247,7 +249,7 @@ impl Net {
             conns: std::collections::BTreeMap::new(),
             outbox: crate::outbox::Outbox::new(),
             // det-allow: transport timeouts, not simulation state
-            epoch: std::time::Instant::now(),
+            epoch: nfs_platform::time::Instant::now(),
             alive: comm::ALIVE_TICKS,
             ping: comm::PING_TICKS,
         }

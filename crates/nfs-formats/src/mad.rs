@@ -249,6 +249,17 @@ mod tbl {
 }
 
 impl MadTables {
+    fn validate_scan(scan: &[usize; 64]) -> Result<(), FormatError> {
+        let mut seen = 0u64;
+        for &index in scan {
+            if index >= 64 || seen & (1u64 << index) != 0 {
+                return Err(FormatError::UnexpectedValue { what: "MAD scan table", offset: 0, expected: "a permutation of raster indices 0..63".into(), found: "invalid or incompatible table".into() });
+            }
+            seen |= 1u64 << index;
+        }
+        Ok(())
+    }
+
     /// The 9-bit primary lookup.
     pub fn primary(&self, idx: u32) -> u32 {
         self.flat[tbl::PRIMARY + idx as usize]
@@ -285,6 +296,9 @@ impl MadTables {
                 found: format!("{:?}", &quant_v[..8]),
             });
         }
+        if scan_v.iter().any(|v| *v < 0 || *v % 4 != 0) {
+            return Err(FormatError::UnexpectedValue { what: "MAD scan table", offset: va::SCAN as usize, expected: "aligned raster offsets".into(), found: "incompatible executable table".into() });
+        }
         let mut quant = [0i32; 64];
         quant.copy_from_slice(&quant_v);
         let mut prescale = [0i32; 64];
@@ -293,6 +307,7 @@ impl MadTables {
         for (s, v) in scan.iter_mut().zip(&scan_v) {
             *s = (*v as usize) / 4;
         }
+        Self::validate_scan(&scan)?;
 
         let read = |from: u32, to: u32| -> Result<Vec<VlcRecord>, FormatError> {
             let n = ((to - from) / 16) as usize;
@@ -395,16 +410,17 @@ impl MadTables {
         quant.iter_mut().for_each(|q| *q = words.next().unwrap_or(0) as i32);
         prescale.iter_mut().for_each(|p| *p = words.next().unwrap_or(0) as i32);
         scan.iter_mut().for_each(|s| *s = words.next().unwrap_or(0) as usize);
+        Self::validate_scan(&scan)?;
         Ok(Self { flat, quant, prescale, scan })
     }
 
     /// The tables for the game at `root`: [`Self::FILE`] when a bundle carries it, otherwise read
     /// out of the installation's own `nfs5.exe`.
     pub fn load(root: &std::path::Path) -> Result<Self, FormatError> {
-        if let Ok(d) = std::fs::read(root.join(Self::FILE)) {
+        if let Ok(d) = nfs_platform::fs::read(root.join(Self::FILE)) {
             return Self::from_bytes(&d);
         }
-        let exe = std::fs::read(root.join("nfs5.exe"))
+        let exe = nfs_platform::fs::read(root.join("nfs5.exe"))
             .map_err(|_| FormatError::Truncated { what: "nfs5.exe", offset: 0, needed: 1 })?;
         Self::from_exe(&exe)
     }
@@ -513,7 +529,9 @@ pub fn decode_block(br: &mut BitReader, t: &MadTables, q: &[i32; 64], out: &mut 
         // that runs past 63 would read past the table, which the shipped streams never do — so the
         // write is guarded and the loop is not, because leaving early would desynchronise it.
         if let Some(&off) = t.scan.get(i) {
-            out[off] = level.wrapping_mul(q[off]);
+            if let (Some(slot), Some(&quant)) = (out.get_mut(off), q.get(off)) {
+                *slot = level.wrapping_mul(quant);
+            }
         }
         i += 1;
         if br.exhausted() {
@@ -874,5 +892,19 @@ mod colour_tests {
         assert_eq!(px(127, 127, 64, 64).0, [255, 255, 255]);
         // v = 127: 1.402·63.5 = 89.03 → 89; u = 0: 1.772·−63.5 → −113
         assert_eq!(px(64, 64, 0, 127).0, [255, 83, 0]);
+    }
+}
+
+#[cfg(test)]
+mod table_validation_tests {
+    use super::*;
+    #[test]
+    fn invalid_serialized_scan_is_rejected_before_decode() {
+        let mut tables = MadTables { flat: vec![0; tbl::LEN], quant: [1;64], prescale: [1;64], scan: std::array::from_fn(|i| i) };
+        assert!(MadTables::from_bytes(&tables.to_bytes()).is_ok());
+        tables.scan[0] = usize::MAX;
+        assert!(MadTables::from_bytes(&tables.to_bytes()).is_err());
+        tables.scan[0] = 1;
+        assert!(MadTables::from_bytes(&tables.to_bytes()).is_err());
     }
 }

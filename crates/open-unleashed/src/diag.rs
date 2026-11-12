@@ -28,14 +28,14 @@ fn log_path() -> Option<PathBuf> {
     let dir = std::env::var_os("NFS5_SAVE_DIR")
         .and_then(|d| PathBuf::from(d).parent().map(|p| p.to_path_buf()))
         .unwrap_or_else(nfs_assets::platform::data_dir);
-    std::fs::create_dir_all(&dir).ok()?;
+    nfs_platform::fs::create_dir_all(&dir).ok()?;
     let path = dir.join("open-unleashed.log");
-    let _ = std::fs::rename(&path, dir.join("open-unleashed.prev.log"));
+    let _ = nfs_platform::fs::rename(&path, dir.join("open-unleashed.prev.log"));
     Some(path)
 }
 
 #[derive(Clone)]
-struct Tee(Arc<Mutex<Option<std::fs::File>>>);
+struct Tee(Arc<Mutex<Option<nfs_platform::fs::File>>>);
 
 impl Write for Tee {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
@@ -62,7 +62,7 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Tee {
 
 /// Appends text to the log file directly (the panic hook must not depend on the subscriber).
 fn append(path: &PathBuf, text: &str) {
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+    if let Ok(mut f) = nfs_platform::fs::OpenOptions::new().create(true).append(true).open(path) {
         let _ = f.write_all(text.as_bytes());
     }
 }
@@ -71,7 +71,7 @@ fn append(path: &PathBuf, text: &str) {
 pub fn init() {
     let path = log_path();
     let _ = LOG.set(path.clone());
-    let file = path.as_ref().and_then(|p| std::fs::File::create(p).ok());
+    let file = path.as_ref().and_then(|p| nfs_platform::fs::File::create(p).ok());
     let tee = Tee(Arc::new(Mutex::new(file)));
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -178,3 +178,6 @@ fn message_box(text: &str) {
     }
     let _ = Command::new("kdialog").args(["--title", title, "--error", text]).status();
 }
+
+#[cfg(target_arch = "wasm32")]
+fn message_box(text: &str) { web_sys::console::error_1(&text.into()); }

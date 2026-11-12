@@ -1,6 +1,8 @@
 //! Per-OS directories: where the port keeps its saves and where it looks for the game data.
 //! (Platform code only — nothing here is a rule of the original.)
 
+#[allow(unused_imports)]
+use nfs_platform::PathExt as _;
 use std::path::PathBuf;
 
 /// The user's home directory (`HOME`; on Windows `USERPROFILE`).
@@ -22,7 +24,9 @@ pub fn data_dir() -> PathBuf {
     // PORT-DEVIATION D41 (RE/notes/PORT-DEVIATIONS.md): the saves live in the per-OS data folder, not in the
     // original's `.\SaveData\` (install.txt directory entry 48, `[0x65B360]`) under the game folder, and an
     // existing original profile is not imported.
-    if cfg!(target_os = "macos") {
+    if cfg!(target_arch = "wasm32") {
+        PathBuf::from("/saves")
+    } else if cfg!(target_os = "macos") {
         let base = home_dir().unwrap_or_else(|| PathBuf::from("."));
         base.join("Library").join("Application Support").join("PorscheUnleashed")
     } else if cfg!(windows) {
@@ -66,12 +70,12 @@ pub fn game_data_candidates() -> Vec<PathBuf> {
 /// `None` when absent.
 pub fn dev_game_root() -> Option<PathBuf> {
     if let Some(p) = std::env::var_os("NFS5_GAME_PATH").map(PathBuf::from)
-        && p.join("GameData").is_dir()
+        && p.join("GameData").host_is_dir()
     {
         return Some(p);
     }
     let home = home_dir()?;
-    ["Games/NFS-Porsche-Unleashed/game_info/data", "Games/NFS-Porsche-Unleashed"].iter().map(|r| home.join(r)).find(|p| p.join("GameData").is_dir())
+    ["Games/NFS-Porsche-Unleashed/game_info/data", "Games/NFS-Porsche-Unleashed"].iter().map(|r| home.join(r)).find(|p| p.join("GameData").host_is_dir())
 }
 
 /// PORT-DEVIATION D46 (photo mode): the folder the stills go to, `<the user's Pictures>/PorscheUnleashed`.
@@ -94,7 +98,7 @@ pub fn photo_dir() -> PathBuf {
         home.join("Pictures")
     } else {
         let conf = std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty()).map(PathBuf::from).unwrap_or_else(|| home.join(".config"));
-        std::fs::read_to_string(conf.join("user-dirs.dirs")).ok().and_then(|t| xdg_pictures_dir(&t, &home)).unwrap_or_else(|| home.join("Pictures"))
+        nfs_platform::fs::read_to_string(conf.join("user-dirs.dirs")).ok().and_then(|t| xdg_pictures_dir(&t, &home)).unwrap_or_else(|| home.join("Pictures"))
     };
     pictures.join("PorscheUnleashed")
 }

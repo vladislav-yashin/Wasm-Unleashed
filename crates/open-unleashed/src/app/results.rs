@@ -56,7 +56,7 @@ impl App {
         let Some(ms) = self.mission.as_ref() else { return };
         let ids = if pass { ms.mission.success_string_ids } else { ms.mission.failure_string_ids };
         let ids: Vec<u32> = ids.iter().copied().filter(|t| *t != 0).collect();
-        let roll = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.subsec_nanos() as usize);
+        let roll = nfs_platform::time::SystemTime::now().duration_since(nfs_platform::time::UNIX_EPOCH).map_or(0, |d| d.subsec_nanos() as usize);
         let text = ids.get(roll % ids.len().max(1)).copied();
         if let (Some(a), Some(m)) = (&self.snd.audio, self.snd.music.as_mut()) {
             let rng = &mut self.fe_rng;
@@ -646,7 +646,7 @@ mod race_number_tests {
             eprintln!("skipping: original game data not found");
             return;
         };
-        let catalog = nfs_formats::fedata::parse_car_catalog(&std::fs::read(paths.fe_data().join("Data").join("nfs5.car")).unwrap()).unwrap();
+        let catalog = nfs_formats::fedata::parse_car_catalog(&nfs_platform::fs::read(paths.fe_data().join("Data").join("nfs5.car")).unwrap()).unwrap();
         let strings = nfs_formats::locale::Strings::default();
         let per_table: Vec<nfs_formats::career::Personality> = Vec::new();
         for decal in [-1, 0, 37, 98] {

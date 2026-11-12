@@ -1323,7 +1323,7 @@ fn traffic_and_cops_on_a_shared_ring_keep_their_draws_and_poses() {
 #[test]
 #[ignore]
 fn ring_timing() {
-    let t0 = std::time::Instant::now();
+    let t0 = nfs_platform::time::Instant::now();
     for _ in 0..20 {
         shared_ring_digest(true);
     }

@@ -15,7 +15,7 @@ pub(super) struct Offline {
     pub(super) written: u64,
 }
 
-pub(super) static DUMP: std::sync::OnceLock<Mutex<std::fs::File>> = std::sync::OnceLock::new();
+pub(super) static DUMP: std::sync::OnceLock<Mutex<nfs_platform::fs::File>> = std::sync::OnceLock::new();
 
 /// TEST GLUE: `NFS_AUDIO_DUMP_TICKS=1` (with `NFS_AUDIO_DUMP`) — the dump is the mix at its own rate
 /// `[0x6B48DA]`, 16-bit stereo, `rate / 64` frames per game tick (`RE/notes/REFERENCE-2026-10-24-PA-AUDIOMIX.md`):
@@ -141,9 +141,13 @@ pub struct AudioOutput {
 }
 
 impl AudioOutput {
+    #[cfg(target_arch = "wasm32")]
+    pub fn resume_browser(&self) {
+        if let Some(stream) = &self._stream { let _ = stream.play(); }
+    }
     pub fn new() -> anyhow::Result<Self> {
         if let Ok(path) = std::env::var("NFS_AUDIO_DUMP") {
-            DUMP.get_or_init(|| Mutex::new(std::fs::File::create(&path).expect("NFS_AUDIO_DUMP")));
+            DUMP.get_or_init(|| Mutex::new(nfs_platform::fs::File::create(&path).expect("NFS_AUDIO_DUMP")));
             let (tx, _) = Tx::new(44100, true);
             tracing::warn!(path, "audio: offline dump (NFS_AUDIO_DUMP), no device");
             return Ok(Self { _stream: None, tx, rate: 44100 });
@@ -487,7 +491,7 @@ impl AudioOutput {
         if at == 0 {
             return 0;
         }
-        let since = l.epoch.elapsed().saturating_sub(std::time::Duration::from_nanos(at - 1));
+        let since = l.epoch.elapsed().saturating_sub(nfs_platform::time::Duration::from_nanos(at - 1));
         latency_ms(l.frames.load(Ordering::Relaxed), since, self.rate)
     }
 

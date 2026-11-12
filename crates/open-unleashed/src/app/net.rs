@@ -201,13 +201,13 @@ impl App {
                 }
             }
             if let Some(path) = nfs_game::config::cfg().nfs_net_dump.as_str()
-                && let Ok(f) = std::fs::File::create(&path)
+                && let Ok(f) = nfs_platform::fs::File::create(&path)
             {
                 self.net_dump = Some(std::io::BufWriter::new(f));
                 // the cars as the race starts, by race index: the specs and the vehicle, in `Debug`
                 // text, so two machines' copies of a car can be told apart at the first field that differs
                 use std::io::Write;
-                if let Ok(mut sf) = std::fs::File::create(format!("{path}.cars")) {
+                if let Ok(mut sf) = nfs_platform::fs::File::create(format!("{path}.cars")) {
                     let mut cars: Vec<(u32, String)> = Vec::new();
                     if let (Some(i), Some(v)) = (n.local_race_index(), self.vehicle.as_ref()) {
                         cars.push((i, format!("{:#?}\n{:#?}", self.specs, v)));
@@ -223,7 +223,7 @@ impl App {
                     }
                 }
                 // the specs alone, for a diff against a replay's (`replay.md` §18.15)
-                if let Ok(mut sf) = std::fs::File::create(format!("{path}.specs")) {
+                if let Ok(mut sf) = nfs_platform::fs::File::create(format!("{path}.specs")) {
                     let mut cars: Vec<(u32, String)> = Vec::new();
                     if let Some(i) = n.local_race_index() {
                         cars.push((i, format!("{:#?}", self.specs)));
@@ -633,7 +633,7 @@ impl App {
     /// **Test glue** (`NFS_NET_DUMP`): every human car of an input-exchange race after the tick, one line
     /// each in race-index order — `tick,index,` then the position, velocity, orientation, spin, rpm and
     /// steer as `f32` bit patterns, and the gear.
-    pub(crate) fn net_dump_tick(out: &mut std::io::BufWriter<std::fs::File>, local: Option<u32>, seat_index: &[Option<u32>], v: &Vehicle, opponents: &[RaceCar], tick: u64) {
+    pub(crate) fn net_dump_tick(out: &mut std::io::BufWriter<nfs_platform::fs::File>, local: Option<u32>, seat_index: &[Option<u32>], v: &Vehicle, opponents: &[RaceCar], tick: u64) {
         use std::io::Write;
         let mut cars: Vec<(u32, &Vehicle)> = Vec::new();
         if let Some(i) = local {
@@ -812,7 +812,7 @@ impl App {
     /// 0x4EEDA0 as `.COLOUR`. `draw` is that generator; a caller that only wants the model
     /// list passes one it does not mind spending.
     fn net_traffic_cars(&self, track: &str, count: u32, draw: &mut impl FnMut() -> u32) -> Vec<nfs_net::options::TrafficCar> {
-        let trk = std::fs::read(self.paths.fe_data().join("Data").join("nfs5.trk"))
+        let trk = nfs_platform::fs::read(self.paths.fe_data().join("Data").join("nfs5.trk"))
             .ok()
             .and_then(|d| nfs_formats::career::parse_track_table(&d).ok())
             .unwrap_or_default();
@@ -864,7 +864,7 @@ impl App {
         if let Some(s) = settings.as_ref() {
             // 0x4B6660 builds the list from `fe.txt` and the launch chain appends after it; 0x4B6560
             // keeps the last record of an id (`nfs_net::options::broadcast_stream`)
-            let fe_text = std::fs::read_to_string(self.paths.root.join("fe.txt")).unwrap_or_default();
+            let fe_text = nfs_platform::fs::read_to_string(self.paths.root.join("fe.txt")).unwrap_or_default();
             let fe_recs = nfs_net::options::fe_txt_records(&fe_text);
             let mut stream = nfs_net::options::broadcast_stream(&fe_recs, &s.stream());
             // the launch chain's own `rand()` draws come first: 0x4EEDA0 starts every car's record
@@ -1042,6 +1042,9 @@ impl App {
     /// `DIAL` has no modem behind it here, and `ENTER` on the server list only moves the cursor,
     /// since what the original's server list connects *to* is the lobby service of §1.
     pub(crate) fn network_callback(&mut self, cb: &str, _event_loop: &ActiveEventLoop) {
+        #[cfg(target_arch = "wasm32")]
+        { let _ = cb; if let Some(window) = web_sys::window() { let _ = window.alert_with_message("Multiplayer is not available in the browser yet"); } return; }
+
         let opened = match cb {
             // `CREATE` on the games screens (0x509E40, registered at 0x509D53 for `local` and
             // `udpip`) raises the game-name dialog; on the peer-to-peer screen (0x50B140) it goes
@@ -1054,7 +1057,7 @@ impl App {
             }
             "CREATE" => {
                 let p2p = self.fe.layout_name.as_deref().is_some_and(|n| n.eq_ignore_ascii_case("peertopeerip"));
-                let stored = std::fs::read_to_string(netplay::game_name_path()).unwrap_or_default().trim().to_string();
+                let stored = nfs_platform::fs::read_to_string(netplay::game_name_path()).unwrap_or_default().trim().to_string();
                 if p2p {
                     self.net.lobby.as_ref().map(|l| l.create(&stored))
                 } else {
@@ -1563,10 +1566,10 @@ pub(crate) fn is_network_layout(name: &str) -> bool {
 /// `+0x5C` and the stale flag — what the smooth-motion proof reads (`network.md` 8.4).
 pub(crate) fn remote_dump(tick: u64, seat: usize, v: &Vehicle, n: &netplay::NetPlay) {
     use std::io::Write;
-    static OUT: std::sync::OnceLock<Option<std::sync::Mutex<std::io::BufWriter<std::fs::File>>>> = std::sync::OnceLock::new();
+    static OUT: std::sync::OnceLock<Option<std::sync::Mutex<std::io::BufWriter<nfs_platform::fs::File>>>> = std::sync::OnceLock::new();
     let out = OUT.get_or_init(|| {
         let path = nfs_game::config::cfg().nfs_remote_dump.as_os_str()?;
-        let mut f = std::io::BufWriter::new(std::fs::File::create(path).ok()?);
+        let mut f = std::io::BufWriter::new(nfs_platform::fs::File::create(path).ok()?);
         let _ = writeln!(f, "tick,seat,x,y,z,speed_est,block_tick,lag,lag_avg,stale");
         Some(std::sync::Mutex::new(f))
     });

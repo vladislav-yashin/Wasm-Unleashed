@@ -494,7 +494,7 @@ mod tests {
         // castle_audio.scn's first type-4 trigger: a line across the road at slice 1591, its
         // `+0xD8` element 296 ("Bad Dog 1592a"), no gates (line 6 all zero), speeds 0…200
         let Ok(paths) = nfs_assets::GamePaths::locate() else { return };
-        let Ok(text) = std::fs::read_to_string(paths.game_data().join("Track").join("castle_audio.scn")) else { return };
+        let Ok(text) = nfs_platform::fs::read_to_string(paths.game_data().join("Track").join("castle_audio.scn")) else { return };
         let scene = Scene::parse(&text).unwrap();
         let t: Vec<CameraTrigger> = scene.elements.iter().filter_map(|e| CameraTrigger::from_element(e, 4, 9)).collect();
         assert_eq!(t.iter().map(|t| t.link).collect::<Vec<_>>(), [296, 294, 297, 295]);

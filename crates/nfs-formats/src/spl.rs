@@ -5,6 +5,8 @@
 //! are used when the file is missing. `game.spl` is a different, longer block — fifteen global mixer
 //! trims, one per sound category; see [`GameSpl`].
 
+#[allow(unused_imports)]
+use nfs_platform::PathExt as _;
 use crate::{u32_le, FormatError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,6 +94,8 @@ pub fn rpm_frac_16(rpm: f32, redline: f32) -> i32 {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use nfs_platform::PathExt as _;
     use super::*;
 
     #[test]
@@ -186,7 +190,7 @@ impl GameSpl {
 
     /// `<sounds>/game.spl`, or `<sounds>/replay.spl` when `replay` (0x4A86A1…0x4A86B5).
     pub fn load_mix(sounds_dir: &std::path::Path, replay: bool) -> Self {
-        std::fs::read(sounds_dir.join(mix_file(replay))).ok().and_then(|d| Self::parse(&d).ok()).unwrap_or_default()
+        nfs_platform::fs::read(sounds_dir.join(mix_file(replay))).ok().and_then(|d| Self::parse(&d).ok()).unwrap_or_default()
     }
 
     /// `[0]` — streamed music: the volume is `MusicLevel · music() >> 7` (0x4A82F0). A `win`/`lose`/
@@ -263,13 +267,14 @@ mod game_spl_tests {
 
 #[cfg(test)]
 mod mix_tests {
+    use nfs_platform::PathExt as _;
     #[test]
     fn a_playback_loads_replay_spl() {
         assert_eq!(super::mix_file(false), "game.spl");
         assert_eq!(super::mix_file(true), "replay.spl");
         // the shipped pair differs in slots 0, 6, 7, 9, 10, 12 and 14 (`replay.md` §9)
         let dir = std::path::PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join("Games/NFS-Porsche-Unleashed/game_info/data/GameData/Sounds");
-        if dir.join("replay.spl").is_file() {
+        if dir.join("replay.spl").host_is_file() {
             let (g, r) = (super::GameSpl::load_mix(&dir, false), super::GameSpl::load_mix(&dir, true));
             assert_eq!((g.music(), r.music()), (52, 68));
             assert_eq!((g.engine(), r.engine()), (16, 10));

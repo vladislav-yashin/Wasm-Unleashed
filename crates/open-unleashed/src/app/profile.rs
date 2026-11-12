@@ -153,7 +153,7 @@ impl App {
     pub(crate) fn apply_saved_profile(&mut self) {
         self.apply_saved_controls();
         let Some(c) = self.career.as_ref() else { return };
-        let Some(s) = std::fs::read(c.profile.path(&c.save_dir)).ok().and_then(|d| nfs_formats::sav::SaveFile::parse(&d).ok()) else { return };
+        let Some(s) = nfs_platform::fs::read(c.profile.path(&c.save_dir)).ok().and_then(|d| nfs_formats::sav::SaveFile::parse(&d).ok()) else { return };
         let side = nfs_game::save::side_from_sav(&s);
         use nfs_game::save::clamp_index;
         // `Comms.IPList`'s Load 0x4B8E00: the strings, then the selection through `SetSelection` 0x4BC240
@@ -430,7 +430,7 @@ impl App {
     /// `[0x5E9130 + id·4]` (`RE/notes/controls.md` §4.117). A profile with none keeps the defaults.
     fn apply_saved_controls(&mut self) {
         let Some(c) = self.career.as_ref() else { return };
-        let Some(s) = std::fs::read(c.profile.path(&c.save_dir)).ok().and_then(|d| nfs_formats::sav::SaveFile::parse(&d).ok()) else { return };
+        let Some(s) = nfs_platform::fs::read(c.profile.path(&c.save_dir)).ok().and_then(|d| nfs_formats::sav::SaveFile::parse(&d).ok()) else { return };
         for (name, fields) in nfs_game::save::saved_controls(&s) {
             if let Some(id) = accessors::controller_action(&name).and_then(nfs_input::binding_id) {
                 self.input.bindings.by_id.insert(id, nfs_input::bindings::Binding::from_fields(fields));

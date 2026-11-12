@@ -23,6 +23,8 @@
 //! (kept as the text `device,payload`, which `nfs-input` reads). Nothing in it is required: a missing
 //! key means the game's own default.
 
+#[allow(unused_imports)]
+use nfs_platform::PathExt as _;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -433,7 +435,7 @@ impl Registry {
 
     /// `fe.txt` in the game root, then the command line (`fe_out.txt` is the written copy and is ignored).
     pub fn load(game_root: &Path) -> Self {
-        let read = |name: &str| std::fs::read(game_root.join(name)).ok();
+        let read = |name: &str| nfs_platform::fs::read(game_root.join(name)).ok();
         let text = read("fe.txt").unwrap_or_default();
         let args = COMMAND_LINE.get().map(Vec::as_slice).unwrap_or(&[]);
         Self::parse_with(&text, args, &read)
@@ -505,6 +507,8 @@ impl RaceSettings {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use nfs_platform::PathExt as _;
     use super::*;
     use std::cell::RefCell;
 
@@ -516,7 +520,7 @@ mod tests {
         if let Some(h) = std::env::var_os("HOME") {
             dirs.push(std::path::PathBuf::from(h).join("Games/NFS-Porsche-Unleashed/game_info/data"));
         }
-        dirs.into_iter().find(|d| d.join("fe.txt").is_file())
+        dirs.into_iter().find(|d| d.join("fe.txt").host_is_file())
     }
 
     /// `text` parsed with `files` as the only readable files, and the names asked for.
@@ -678,7 +682,7 @@ mod tests {
     #[test]
     fn the_shipped_fe_txt() {
         let Some(dir) = game_dir() else { return };
-        let text = std::fs::read(dir.join("fe.txt")).unwrap();
+        let text = nfs_platform::fs::read(dir.join("fe.txt")).unwrap();
         let r = Registry::parse_with(&text, &[], &|_| None);
         // the thirty-six keys the original drops (options.md §9.8) and the two NULL-pointer ones
         for k in [
@@ -708,7 +712,7 @@ mod tests {
     #[test]
     fn the_tables_match_the_image() {
         let Some(dir) = game_dir() else { return };
-        let Ok(exe) = std::fs::read(dir.join("nfs5.exe")) else { return };
+        let Ok(exe) = nfs_platform::fs::read(dir.join("nfs5.exe")) else { return };
         let has = |n: &str| {
             let mut pat = vec![0u8];
             pat.extend_from_slice(n.as_bytes());

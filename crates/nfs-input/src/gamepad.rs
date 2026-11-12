@@ -359,7 +359,7 @@ struct TestStep {
 
 /// The `NFS_FF_TEST` sequence's clock (see [`Gamepads::rumble_test_tick`]).
 struct RumbleTest {
-    start: std::time::Instant,
+    start: nfs_platform::time::Instant,
     current: Option<usize>,
     /// the step just entered this call (log it, fire its pulse)
     entered: bool,
@@ -367,7 +367,7 @@ struct RumbleTest {
 
 impl Default for RumbleTest {
     fn default() -> Self {
-        Self { start: std::time::Instant::now(), current: None, entered: false }
+        Self { start: nfs_platform::time::Instant::now(), current: None, entered: false }
     }
 }
 

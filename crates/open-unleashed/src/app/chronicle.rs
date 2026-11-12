@@ -31,7 +31,7 @@ impl App {
     pub(crate) fn chronicle_logo(&self, file: &str) -> Option<(String, i16)> {
         let dir = self.paths.fe_data().join("Chron");
         let path = GamePaths::find_file(&dir, file)?;
-        let data = std::fs::read(&path).ok()?;
+        let data = nfs_platform::fs::read(&path).ok()?;
         let entries = nfs_assets::texture::decode_pack(&path, &data).ok()?;
         let text = entries.get(1)?.text.as_deref()?;
         if text.len() < 3 {
@@ -165,7 +165,7 @@ impl App {
         let Some(path) = GamePaths::find_file(&dir, &format!("{}.fsh", PACKS[self.fe.chronicle_group.min(4)])) else {
             return Vec::new();
         };
-        let Some(pack) = std::fs::read(&path).ok().and_then(|d| nfs_formats::fsh::Fsh::parse(&d).ok()) else {
+        let Some(pack) = nfs_platform::fs::read(&path).ok().and_then(|d| nfs_formats::fsh::Fsh::parse(&d).ok()) else {
             return Vec::new();
         };
         let mut out: Vec<(u32, usize, usize, [usize; 2])> = Vec::new();
@@ -221,7 +221,7 @@ impl App {
         let Some(path) = GamePaths::find_file(&dir, &format!("{}.fsh", PACKS[self.fe.chronicle_group.min(4)])) else {
             return vec![None; cols.len()];
         };
-        let Some(data) = std::fs::read(&path).ok() else { return vec![None; cols.len()] };
+        let Some(data) = nfs_platform::fs::read(&path).ok() else { return vec![None; cols.len()] };
         let Some(pack) = nfs_formats::fsh::Fsh::parse(&data).ok() else { return vec![None; cols.len()] };
         let entries = self.chronicle_entries();
         cols.iter()
@@ -266,7 +266,7 @@ impl App {
     fn chronicle_year_range(&self) -> (i32, i32) {
         const PACKS: [&str; 5] = ["iconsrace", "icons911", "icons356", "icons924", "icons914"];
         let tags: Vec<String> = GamePaths::find_file(&self.paths.fe_data().join("Chron"), &format!("{}.fsh", PACKS[self.fe.chronicle_group.min(4)]))
-            .and_then(|path| std::fs::read(path).ok())
+            .and_then(|path| nfs_platform::fs::read(path).ok())
             .and_then(|d| nfs_formats::fsh::Fsh::parse(&d).ok())
             .map(|pack| pack.entries.iter().map(|e| e.name.clone()).collect())
             .unwrap_or_default();

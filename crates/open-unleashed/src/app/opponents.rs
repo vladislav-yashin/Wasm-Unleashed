@@ -56,7 +56,7 @@ impl App {
 
     /// `nfs5.per`, the 35 driver records (`career.md` §4).
     pub(crate) fn per_table(paths: &GamePaths) -> Vec<nfs_formats::career::Personality> {
-        std::fs::read(paths.fe_data().join("Data").join("nfs5.per"))
+        nfs_platform::fs::read(paths.fe_data().join("Data").join("nfs5.per"))
             .ok()
             .and_then(|d| nfs_formats::career::parse_personalities(&d).ok())
             .unwrap_or_default()
@@ -123,7 +123,7 @@ impl App {
             .map(|(i, _)| i)
             .collect();
         // the paint packages of `GameData/CarModel/packages.ini` (`[header] count`)
-        let package_count = std::fs::read_to_string(dir.join("packages.ini"))
+        let package_count = nfs_platform::fs::read_to_string(dir.join("packages.ini"))
             .ok()
             .and_then(|t| {
                 t.lines().find_map(|l| {

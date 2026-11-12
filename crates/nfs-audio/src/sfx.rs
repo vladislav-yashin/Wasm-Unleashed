@@ -609,7 +609,7 @@ fn atten_for(d: f32, view_0c: bool) -> i32 {
 impl CollisionSfx {
     pub fn load(sounds_dir: &Path) -> anyhow::Result<Self> {
         let path = sounds_dir.join("SND_coll.bnk");
-        let data = std::fs::read(&path).map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
+        let data = nfs_platform::fs::read(&path).map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
         let bank = Bnk::parse(&data)?;
         tracing::info!(slots = bank.slot_count(), "collision bank loaded");
         // `game.spl` read once for both

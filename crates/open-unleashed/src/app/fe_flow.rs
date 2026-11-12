@@ -94,7 +94,7 @@ impl App {
             Some((true, DialogFor::NetGameName)) => {
                 let typed = self.fe.dialog_input.take().unwrap_or_default();
                 let name: String = typed.chars().take(netplay::GAME_NAME_MAX).collect();
-                if let Err(e) = std::fs::write(netplay::game_name_path(), &name) {
+                if let Err(e) = nfs_platform::fs::write(netplay::game_name_path(), &name) {
                     tracing::debug!(error = %e, "Comms.GameName not kept");
                 }
                 let opened = self.net.lobby.as_ref().map(|l| l.create(&name));

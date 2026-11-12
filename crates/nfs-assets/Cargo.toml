@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+nfs-platform.workspace = true
 nfs-formats.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
