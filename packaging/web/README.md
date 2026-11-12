@@ -73,13 +73,28 @@ Browser audio uses CPAL's Web Audio output, with asynchronous music feeding and
 resume on user interaction. It does not yet use a dedicated AudioWorklet mixer.
 Wheel force feedback and network sessions are unavailable in the web version.
 
+## Interface language
+
+The browser shell — loader, toolbar, touch labels and status messages — is translated in
+`packaging/web/i18n.mjs`. English is the default and the fallback; `ru`, `de`, `fr`, `it` and `es`
+ship alongside it. The language comes from `?lang=de`, then a saved choice in `localStorage`
+(`wasm-unleashed-locale`), then the browser's `navigator.languages`, then English. A query
+parameter applies to that page load only; the toolbar selector stores an explicit choice.
+`index.html` keeps the English text so the page is usable before the module loads. To add a locale,
+add its catalog, its `<option>` and the tests that compare key sets. Errors raised by `assets.mjs`,
+`vfs.mjs` and IndexedDB stay English inside the translated wrapper.
+
+This setting is independent of the game's own text: the front end, HUD and subtitles still come
+from the original tables (`FEStrings.loc`, the install's `Language` registry value), so switching
+the shell does not retranslate them.
+
 ## Validation and remaining acceptance work
 
 ```sh
 cargo +stable check -p open-unleashed --target wasm32-unknown-unknown --locked
 cargo +stable test -p nfs-formats -p nfs-net --lib
 python3 -m unittest discover -s tools/web -p 'test_*.py'
-node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs
+node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs
 ```
 
 For Firefox frame-pacing investigations, pass `--profile-webgl` to

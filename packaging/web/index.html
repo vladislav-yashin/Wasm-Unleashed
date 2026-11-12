@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Wasm Unleashed</title>
@@ -7,21 +7,29 @@
 <body>
 <section id="loader" role="status">
 <h1>Wasm Unleashed</h1>
-<p id="status">Готов к загрузке игры</p>
+<p id="status" data-i18n="status.ready">Ready to load the game</p>
 <progress id="progress" value="0" max="1"></progress>
-<button id="start">Запустить</button>
+<button id="start" data-i18n="action.start">Start</button>
 </section>
-<nav id="tools" aria-label="Управление игрой">
-<button id="fullscreen">⛶</button>
-<button id="export">Экспорт сохранений</button>
-<label class="button">Импорт<input id="import" type="file" accept="application/json"></label>
+<nav id="tools" aria-label="Game controls" data-i18n-aria-label="toolbar.controls">
+<button id="fullscreen" title="Toggle fullscreen" aria-label="Toggle fullscreen" data-i18n-title="toolbar.fullscreen" data-i18n-aria-label="toolbar.fullscreen">⛶</button>
+<button id="export" data-i18n="toolbar.export">Export saves</button>
+<label class="button"><span data-i18n="toolbar.import">Import</span><input id="import" type="file" accept="application/json"></label>
+<select id="language" aria-label="Language" data-i18n-aria-label="toolbar.language">
+<option value="en">English</option>
+<option value="ru">Русский</option>
+<option value="de">Deutsch</option>
+<option value="fr">Français</option>
+<option value="it">Italiano</option>
+<option value="es">Español</option>
+</select>
 <span id="save-status" role="status"></span>
 </nav>
-<div id="touch" aria-label="Сенсорное управление">
-<div><button data-code="ArrowLeft" aria-label="Руль влево">◀</button><button data-code="ArrowRight" aria-label="Руль вправо">▶</button></div>
-<div><button data-code="KeyP">Пауза</button><button data-code="KeyC">Камера</button><button data-code="KeyA">+</button><button data-code="KeyZ">−</button></div>
-<div><button data-code="Space">Ручник</button><button data-code="ArrowDown">Тормоз</button><button data-code="ArrowUp">Газ</button></div>
+<div id="touch" aria-label="Touch controls" data-i18n-aria-label="toolbar.touch">
+<div><button data-code="ArrowLeft" aria-label="Steer left" data-i18n-aria-label="touch.steerLeft">◀</button><button data-code="ArrowRight" aria-label="Steer right" data-i18n-aria-label="touch.steerRight">▶</button></div>
+<div><button data-code="KeyP" data-i18n="touch.pause">Pause</button><button data-code="KeyC" data-i18n="touch.camera">Camera</button><button data-code="KeyA" aria-label="Zoom in" data-i18n-aria-label="touch.zoomIn">+</button><button data-code="KeyZ" aria-label="Zoom out" data-i18n-aria-label="touch.zoomOut">−</button></div>
+<div><button data-code="Space" data-i18n="touch.handbrake">Handbrake</button><button data-code="ArrowDown" data-i18n="touch.brake">Brake</button><button data-code="ArrowUp" data-i18n="touch.throttle">Throttle</button></div>
 </div>
-<input id="text-input" aria-label="Ввод имени" placeholder="Имя профиля" maxlength="32" autocomplete="off">
+<input id="text-input" aria-label="Profile name" placeholder="Profile name" data-i18n-aria-label="input.profileName" data-i18n-placeholder="input.profileName" maxlength="32" autocomplete="off">
 <script type="module" src="bootstrap.mjs"></script>
 </body></html>

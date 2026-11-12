@@ -58,7 +58,7 @@ The equivalent commands:
 cargo +stable check --locked -p open-unleashed --target wasm32-unknown-unknown
 cargo +stable test --locked -p nfs-formats -p nfs-net --lib
 python3 -m unittest discover -s tools/web -p 'test_*.py'
-node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs
+node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs
 ```
 
 Tests that read the original data skip themselves when the game is not found.
@@ -81,5 +81,5 @@ flow are described in [deployment](../../packaging/web/DEPLOY.md).
 | `nfs-renderer` | wgpu renderer reproducing the original's look on WebGPU and WebGL2 |
 | `nfs-audio`, `nfs-input`, `nfs-net` | sound, controls and force feedback, the original network protocol |
 | `open-unleashed` | the game application and browser startup |
-| `packaging/web` | browser shell, asset source, virtual filesystem and persistence |
+| `packaging/web` | browser shell, translations, asset source, virtual filesystem and persistence |
 | `tools/web` | build, asset packaging, local serving and optional browser checks |

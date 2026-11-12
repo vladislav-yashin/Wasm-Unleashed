@@ -1,28 +1,39 @@
 import { AssetSource } from './assets.mjs';
 import { VirtualFileSystem } from './vfs.mjs';
+import { apply, detectLocale, getLocale, onLocaleChange, setLocale, t } from './i18n.mjs';
 const status = document.querySelector('#status');
 const loader = document.querySelector('#loader');
 const start = document.querySelector('#start');
 const progress = document.querySelector('#progress');
 const saveStatus = document.querySelector('#save-status');
+setLocale(detectLocale(), { persist: false });
+apply();
+const language = document.querySelector('#language');
+language.value = getLocale();
+language.onchange = () => { setLocale(language.value); };
+// Texts that depend on runtime state: re-render them when the locale changes.
+const dynamic = new Map();
+const say = (node, render) => { dynamic.set(node, render); node.textContent = render(); };
+const message = (key, params) => () => t(key, params);
+onLocaleChange(() => { apply(); for (const [node, render] of dynamic) node.textContent = render(); });
 let fs, initialized = false;
 let recovery = false;
 const report = error => {
   recovery ||= initialized || !!document.querySelector('canvas');
-  status.textContent = String(error.message || error); loader.hidden = false;
-  start.textContent = recovery ? 'Перезагрузить' : 'Повторить';
+  say(status, () => String(error.message || error)); loader.hidden = false;
+  say(start, () => t(recovery ? 'action.reload' : 'action.retry'));
   if (recovery) { flush(); start.focus(); }
 };
-globalThis.nfsFatal = message => report(new Error(message));
+globalThis.nfsFatal = text => report(new Error(text));
 window.addEventListener('unhandledrejection', event => report(event.reason));
 window.addEventListener('error', event => report(event.error || event.message));
 let timer;
 let retryTrack;
 async function flush() {
   if (!fs?.dirty.size) return;
-  saveStatus.textContent = 'Сохранение…';
-  try { await fs.flush(); saveStatus.textContent = fs.dirty.size ? 'Сохранение…' : 'Сохранено'; }
-  catch (error) { saveStatus.textContent = `Не сохранено: ${error.message}. Экспортируйте прогресс.`; }
+  say(saveStatus, message('saves.saving'));
+  try { await fs.flush(); say(saveStatus, message(fs.dirty.size ? 'saves.saving' : 'saves.saved')); }
+  catch (error) { say(saveStatus, message('saves.failed', {error: error.message})); }
 }
 start.addEventListener('click', async () => {
   if (recovery) { location.reload(); return; }
@@ -33,9 +44,9 @@ start.addEventListener('click', async () => {
       const source = await AssetSource.open(new URLSearchParams(location.search).get('data') || './data/');
       fs = new VirtualFileSystem(source);
       globalThis.nfsVfs = fs;
-      try { await fs.openSaves(); } catch (error) { saveStatus.textContent = `Сохранения временные: ${error.message}`; }
+      try { await fs.openSaves(); } catch (error) { say(saveStatus, message('saves.temporary', {error: error.message})); }
     }
-    status.textContent = 'Загрузка игровых ресурсов…';
+    say(status, message('loading.assets'));
     const tracks = Object.keys(fs.source.manifest.files).filter(path => path.startsWith('gamedata/track/'));
     const sharedTrack = path => path.endsWith('/animdefs.txt') || path.endsWith('/default.bin') || path.startsWith('gamedata/track/data/');
     const trackPaths = name => tracks.filter(path => sharedTrack(path) || !name || path.split('/').at(-1).startsWith(name.toLowerCase()));
@@ -45,11 +56,11 @@ start.addEventListener('click', async () => {
       while (true) {
         start.hidden = true;
         try {
-          await fs.preload(trackPaths(name), (done,total,path) => { progress.max=total;progress.value=done;status.textContent=`${done} / ${total}: ${path}`; });
+          await fs.preload(trackPaths(name), (done,total,path) => { progress.max=total;progress.value=done;say(status, message('loading.progress', {done, total, path})); });
           loader.hidden = true; start.hidden = false;
           return;
         } catch(error) {
-          status.textContent = String(error.message || error); loader.hidden = false; start.textContent = 'Повторить'; start.hidden = false; start.disabled = false;
+          say(status, () => String(error.message || error)); loader.hidden = false; say(start, message('action.retry')); start.hidden = false; start.disabled = false;
           await new Promise(resolve => { retryTrack = resolve; });
         }
       }
@@ -57,7 +68,7 @@ start.addEventListener('click', async () => {
     const initial = Object.keys(fs.source.manifest.files).filter(path => !path.startsWith('gamedata/track/') || sharedTrack(path) || path.split('/').at(-1).startsWith('alps'));
     await fs.preload(initial, (done, total, path) => {
       progress.max = total; progress.value = done;
-      status.textContent = `${done} / ${total}: ${path}`;
+      say(status, message('loading.progress', {done, total, path}));
     });
     if (!initialized) {
       const { default: init } = await import('./pkg/open_unleashed.js');
@@ -86,8 +97,8 @@ document.querySelector('#export').onclick = () => {
 document.querySelector('#import').onchange = async event => {
   const file = event.target.files[0];
   if (!file || !fs) return;
-  try { await fs.importSaves(await file.text()); saveStatus.textContent = 'Импортировано. Перезагрузите игру.'; }
-  catch (error) { saveStatus.textContent = error.message; }
+  try { await fs.importSaves(await file.text()); say(saveStatus, message('saves.imported')); }
+  catch (error) { say(saveStatus, () => error.message); }
   event.target.value = '';
 };
 document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
@@ -125,6 +136,6 @@ new MutationObserver(() => {
   if (!canvas || observedCanvases.has(canvas)) return;
   observedCanvases.add(canvas);
   canvas.addEventListener('webglcontextlost', event => {
-    event.preventDefault(); flush(); report(new Error('Графический контекст потерян. Перезагрузите игру, чтобы восстановить сохранённый профиль.'));
+    event.preventDefault(); flush(); report(new Error(t('error.contextLost')));
   });
 }).observe(document.body, {childList:true});

@@ -52,7 +52,7 @@ Run checks appropriate to the change:
 cargo +stable check --locked -p open-unleashed --target wasm32-unknown-unknown
 cargo +stable test --locked -p nfs-formats -p nfs-net --lib
 python3 -m unittest discover -s tools/web -p 'test_*.py'
-node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs
+node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs
 python3 tools/web/build.py
 ```
 

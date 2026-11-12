@@ -14,19 +14,20 @@
 ## Opening the game
 
 1. Open the hosted build, or start your own server (see [building](building.md)).
-2. Press **Запустить / Start**. The page downloads the game resources and shows the progress.
+2. Press **Start**. The page downloads the game resources and shows the progress.
 3. Wait for the loader to finish. The intro movies and the original front end start as in the original game.
 4. Use the fullscreen button in the top-right corner to enter browser fullscreen. The game canvas takes the
    whole page.
+5. The language selector in the toolbar switches the browser shell and remembers your choice; the shell
+   follows the browser's language until then. The game's own text still comes from the installed data.
 
 The game data is served over HTTP and is read-only. Only progress and settings are written by the browser.
 
 ## Saves, settings and the toolbar
 
 Profiles, records and settings live in the browser's IndexedDB under `/saves`. The toolbar reports whether
-writes reached persistent storage. Use **Экспорт сохранений / Export saves** to download a JSON copy and
-**Импорт / Import** to load one back. Import replaces the stored saves; restart the game afterwards so the
-in-memory profile is reloaded.
+writes reached persistent storage. Use **Export saves** to download a JSON copy and **Import** to load one
+back. Import replaces the stored saves; restart the game afterwards so the in-memory profile is reloaded.
 
 If persistent storage is unavailable (for example, private browsing or a browser that refused the storage
 request), the game keeps progress for the current page only. Export the saves before closing the page.

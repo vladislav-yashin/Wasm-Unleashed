@@ -58,7 +58,7 @@ make fmt-check                 # форматирование Rust
 cargo +stable check --locked -p open-unleashed --target wasm32-unknown-unknown
 cargo +stable test --locked -p nfs-formats -p nfs-net --lib
 python3 -m unittest discover -s tools/web -p 'test_*.py'
-node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs
+node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs
 ```
 
 Тесты, которым нужны данные оригинала, пропускаются, если игра не найдена.
@@ -81,5 +81,5 @@ wasm-bindgen. Файлов оригинальной игры там нет. По
 | `nfs-renderer` | рендер на wgpu, повторяющий картинку оригинала на WebGPU и WebGL2 |
 | `nfs-audio`, `nfs-input`, `nfs-net` | звук, управление и обратная связь, сетевой протокол |
 | `open-unleashed` | приложение игры и запуск в браузере |
-| `packaging/web` | браузерная оболочка, источник ресурсов, виртуальная файловая система и сохранения |
+| `packaging/web` | браузерная оболочка, переводы, источник ресурсов, виртуальная файловая система и сохранения |
 | `tools/web` | сборка, упаковка ресурсов, локальный сервер и браузерные проверки |
