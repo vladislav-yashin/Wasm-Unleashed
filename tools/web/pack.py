@@ -10,7 +10,7 @@ import struct
 import subprocess
 import tempfile
 
-# Files inside GameData/FEData that no crate parses. This mirrors packaging/stage_data.sh.
+# Files inside GameData/FEData that no crate parses.
 UNNEEDED_PATTERNS = ('vssver.scc', '*.xls', '*.h', '*.dtx', '*.eng', '*.pfn')
 # Root files the browser build consumes, in addition to the derived movie tables.
 ROOT_FILES = ('fe.txt', 'version.txt', 'nfs5.ini')

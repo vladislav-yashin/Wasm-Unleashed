@@ -24,19 +24,19 @@ body:
     id: version
     attributes:
       label: Version / Версия
-      description: Archive name or commit. / Имя архива или коммит.
+      description: Build URL or commit. / URL сборки или коммит.
     validations:
       required: true
   - type: input
     id: system
     attributes:
-      label: System / Система
-      description: OS and version, CPU, GPU and driver. / ОС и версия, процессор, видеокарта и драйвер.
+      label: Browser and device / Браузер и устройство
+      description: Browser and version, OS or device, GPU and driver. / Браузер и версия, ОС или устройство, видеокарта и драйвер.
     validations:
       required: true
   - type: textarea
     id: log
     attributes:
-      label: open-unleashed.log
-      description: From the saves folder (see docs/en/install.md). / Из папки сохранений (см. docs/ru/install.md).
+      label: Browser console / Консоль браузера
+      description: Developer console errors (see docs/en/install.md). / Ошибки консоли разработчика (см. docs/ru/install.md).
       render: text

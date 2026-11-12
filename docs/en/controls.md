@@ -6,15 +6,15 @@ The keyboard defaults are the original's. Keys and gamepad controls can be chang
 (Options → Controls), where "Default" on a device restores its layout. A gamepad works only through these
 bindings. On a standard pad (Xbox, PlayStation, Switch Pro) a profile whose controls were never changed gets
 the pad's layout by itself when the pad is connected; otherwise pick the pad in the device list and press
-"Default". The pad's layout is a modern one — left stick steers, RT throttle and LT brake (both analogue), A handbrake,
-B look back, X reset the car, Y camera, RB / LB shift up / down, Start pause, L3 horn, d-pad up lights,
-d-pad left / right turn signals, d-pad down hazards, right stick looks left / right. Wheels and other
-devices get the original's layout. In the menus the d-pad or left stick moves, A selects. Force feedback
-is used where the system and the pad support it. The keyboard keeps working beside a pad: an action bound to the
-pad still answers its default key, unless that key is bound to another action.
+"Default". The pad's layout is a modern one — left stick steers, RT throttle and LT brake (both analogue), A
+handbrake, B look back, X reset the car, Y camera, RB / LB shift up / down, Start pause, L3 horn, d-pad up
+lights, d-pad left / right turn signals, d-pad down hazards, right stick looks left / right. Wheels and other
+devices get the original's layout. In the menus the d-pad or left stick moves, A selects. The keyboard keeps
+working beside a pad: an action bound to the pad still answers its default key, unless that key is bound to
+another action.
 
-On a standard pad the race's dialogs and the replay bar have their own keys, which act only while a dialog or the bar
-is up (never while driving): d-pad / left stick picks, A answers, B goes back.
+On a standard pad the race's dialogs and the replay bar have their own keys, which act only while a dialog or
+the bar is up (never while driving): d-pad / left stick picks, A answers, B goes back.
 
 | Screen | Pad |
 |---|---|
@@ -22,7 +22,18 @@ is up (never while driving): d-pad / left stick picks, A answers, B goes back.
 | result pages, notices | A closes the page, as Space does; on a failed mission's summary Y is "race again" |
 | replay save | A saves under the typed name, or under the first free "Replay1", "Replay2"…; B closes it |
 | "overwrite?" question | d-pad picks, A answers, B is "no" |
-| replay playback | A play / pause, d-pad right / left speed up / down, d-pad up the result pages again, d-pad down restart (a network replay: previous car), X save the replay, B quit, Y camera |
+| replay playback | A play / pause, d-pad right / left speed up / down, d-pad up the result pages again, d-pad down restart, X save the replay, B quit, Y camera |
+
+## Browser and touch
+
+The game runs in the browser canvas. The fullscreen button in the top-right corner enters browser
+fullscreen; click the canvas first if the keyboard does not respond. Gamepads are read through the browser's
+Gamepad API and work after the first button press or stick movement; wheel force feedback is unavailable in
+the browser.
+
+On touch devices an on-screen panel provides the essential controls: left / right steering, throttle, brake,
+handbrake, pause, camera and gear up / down. The panel is shown for coarse pointers and can be used together
+with a connected gamepad.
 
 ## Driving
 
@@ -61,9 +72,9 @@ At the end of a race **Space** closes the result pages one by one and leaves the
 
 ## Photo mode
 
-A free camera for a paused race or a replay (not in network races, where the pause does not stop the race). Enter it
-from the pause menu's **photo mode** item (on a pad: d-pad to it, A), or with **K** (also **F11** on Windows and Linux)
-in the pause menu or a replay. The race or the replay stands still while it is up. It is not in the original game.
+A free camera for a paused race or a replay. Enter it from the pause menu's **photo mode** item (on a pad:
+d-pad to it, A), or with **K** in the pause menu or a replay. The race or the replay stands still while it is
+up. It is not in the original game.
 
 | Keyboard / mouse | Pad | Action |
 |---|---|---|
@@ -77,7 +88,8 @@ in the pause menu or a replay. The race or the replay stands still while it is u
 | Tab, R | | the hint, reset the camera |
 | K, Esc, P, Backspace | B | leave |
 
-Pictures are saved as PNG to `PorscheUnleashed` in the user's Pictures folder: `~/Pictures` on macOS, the Pictures folder Explorer shows on Windows (also when it was moved or OneDrive keeps it), `XDG_PICTURES_DIR` (else `~/Pictures`) on Linux. `NFS_PHOTO_DIR` names another folder.
+Pictures are saved as PNG downloads at the current canvas resolution. The browser may ask where to save the
+file or put it in its downloads folder.
 
 ## Menus
 

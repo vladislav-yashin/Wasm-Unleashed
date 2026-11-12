@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Render the application icon from icon.svg into the files the builds embed (they are committed, so a build needs
-none of this): icon.icns (the macOS app bundle), icon.ico (the Windows executable), icon-256.png (the window icon on
-Windows / Linux, and the icon beside the Linux binary).
+"""Render the project icon from icon.svg into the committed image files. A browser build needs none of this:
+the SVG is the source, and icon-256.png is ready for a favicon or a future PWA manifest. The .icns and .ico
+files are kept for any packaging that needs platform icon formats.
 
     python3 -m venv /tmp/icons && /tmp/icons/bin/pip install resvg-py pillow
     /tmp/icons/bin/python packaging/brand/render_icons.py

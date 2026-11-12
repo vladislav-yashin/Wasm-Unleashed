@@ -374,8 +374,8 @@ impl MadTables {
         Ok(Self { flat, quant, prescale, scan })
     }
 
-    /// The name of the small table file a self-contained app bundle carries instead of the whole
-    /// executable (`packaging/make_app.sh --with-data`, written by the `extract_mad_tables` example).
+    /// The name of the small table file the browser build carries instead of the whole
+    /// executable (written by the `extract_mad_tables` example and staged by `make web-data`).
     pub const FILE: &'static str = "madtables.bin";
     const MAGIC: &'static [u8; 8] = b"NFSMADT1";
 

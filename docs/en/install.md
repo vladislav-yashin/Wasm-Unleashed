@@ -1,60 +1,52 @@
-# Installation and first start
+# First start in the browser
 
 **English** | [Русский](../ru/install.md)
 
 ## What you need
 
-- Your own copy of **Need for Speed: Porsche Unleashed** (PC, 2000), installed or copied from the disc.
-  The engine uses its data; nothing of the original game is included.
-- One of:
-  - **macOS** 13 or newer, Apple Silicon or Intel (one universal app);
-  - **Windows** 10 or newer, 64-bit, a GPU driver with DirectX 12 or Vulkan;
-  - **Linux** x86_64 with glibc 2.36 or newer (Debian 12, Ubuntu 23.04 and later), a Vulkan driver (or, without
-    one, OpenGL 3.3), X11 or Wayland.
+- Your own copy of **Need for Speed: Porsche Unleashed** (PC, 2000). The game data is prepared by whoever
+  hosts the build; nothing of the original game is included in the project.
+- A current desktop or mobile browser with WebAssembly, WebGL2 or WebGPU, IndexedDB and Web Audio. WebGPU is
+  used when the browser provides it; otherwise the renderer falls back to WebGL2.
+- A secure context: HTTPS for a remote site, or `localhost` / `127.0.0.1` for local development. If the game
+  assets come from another origin, that server must send CORS headers.
 
-## Steps
+## Opening the game
 
-1. Download the archive for your system from the releases and unpack it.
-2. Copy the folders **`GameData`** and **`FEData`** from the installed game (the folder that holds `nfs5.exe`) into
-   the **`game`** folder of the unpacked archive. For network games also copy `version.txt` (the game's version,
-   `3.5`: every player of a race must have the same). Optionally also copy `nfs5.exe` (the intro movies read their
-   tables from it; it is never run) and `fe.txt`. Other places the engine looks: [game data](game-data.md).
-3. Start the game:
-   - **macOS:** `OpenUnleashed.app`. The app is not notarised: the first time, right-click it → **Open**, or run
-     `xattr -dr com.apple.quarantine OpenUnleashed.app` in Terminal.
-   - **Windows:** `OpenUnleashed.exe`.
-   - **Linux:** `./run.sh` (or `./OpenUnleashed` from the archive's folder).
+1. Open the hosted build, or start your own server (see [building](building.md)).
+2. Press **Запустить / Start**. The page downloads the game resources and shows the progress.
+3. Wait for the loader to finish. The intro movies and the original front end start as in the original game.
+4. Use the fullscreen button in the top-right corner to enter browser fullscreen. The game canvas takes the
+   whole page.
 
-On Linux the runtime needs (Debian / Ubuntu package names) `libasound2` or `libasound2t64` (sound), `libudev1`
-(gamepads), `libvulkan1` and a Vulkan driver (`mesa-vulkan-drivers` or your vendor's); without Vulkan the game
-falls back to OpenGL 3.3 through EGL (`libegl1` and `libgl1-mesa-dri` or your vendor's driver).
+The game data is served over HTTP and is read-only. Only progress and settings are written by the browser.
+
+## Saves, settings and the toolbar
+
+Profiles, records and settings live in the browser's IndexedDB under `/saves`. The toolbar reports whether
+writes reached persistent storage. Use **Экспорт сохранений / Export saves** to download a JSON copy and
+**Импорт / Import** to load one back. Import replaces the stored saves; restart the game afterwards so the
+in-memory profile is reloaded.
+
+If persistent storage is unavailable (for example, private browsing or a browser that refused the storage
+request), the game keeps progress for the current page only. Export the saves before closing the page.
 
 ## Network games
 
-Network races use **UDP port 9442**.
-
-- **macOS** asks to allow **Local Network** on the first start — press Allow (later: System Settings → Privacy &
-  Security → Local Network).
-- **Windows** may show a firewall prompt — allow private networks for LAN / internet play.
-- **Linux:** open UDP 9442 in your firewall if you host.
-
-## Saves, settings and the log
-
-| System | Folder |
-|---|---|
-| macOS | `~/Library/Application Support/PorscheUnleashed` |
-| Windows | `%APPDATA%\PorscheUnleashed` |
-| Linux | `$XDG_DATA_HOME/PorscheUnleashed`, else `~/.local/share/PorscheUnleashed` |
-
-Career saves are written as the original writes them (`SaveData/…sav`). `open-unleashed.log` in the same folder records
-each start — attach it when you report a problem. `NFS5_SAVE_DIR=<folder>` points the saves elsewhere.
+Browser multiplayer is planned for a later stage. Network races, LAN discovery and the original UDP protocol
+are not available in the browser build yet, so no firewall ports need to be opened.
 
 ## If something goes wrong
 
-- **"original game data not found"** — the `game` folder does not hold `GameData` and `FEData`, or they are one level
-  deeper. See [game data](game-data.md).
-- **The game does not start / crashes at start-up** — look at `open-unleashed.log` (above) and report it with your system
-  and GPU. A start that follows a crashed one runs once in a safe mode (a plain GPU device, on Windows Direct3D 12) and
-  the log says so; if the next start is normal again, nothing is needed. On Windows an Intel integrated GPU uses
-  Direct3D 12 by default, and the archive carries `dxcompiler.dll` and `dxil.dll` (the DirectX Shader Compiler) beside
-  the exe; `WGPU_BACKEND=vulkan` (or `dx12` / `gl`) picks the graphics API by hand.
+- **The loader reports a missing or invalid resource** — the server does not have the prepared `web-data`
+  directory, the manifest is incomplete, or an object failed its hash check. Rebuild the data with
+  `make web-data GAME_DIR=/path/to/game` and upload the whole output.
+- **Resources fail to load from another origin** — the asset server needs HTTPS and CORS headers.
+- **The game does not start or shows a graphics error** — the browser could not create a WebGPU or WebGL2
+  device. Update the browser and the graphics driver, enable hardware acceleration, or try another browser.
+- **The intro is skipped** — the server's `web-data` has no `madtables.bin`. It is derived from a compatible
+  original executable; see [game data](game-data.md).
+- **The graphics context is lost** — the page asks to reload. Saved progress is flushed before the reload and
+  is restored from IndexedDB.
+- **A problem needs reporting** — open the browser's developer console and include its errors together with
+  the browser, device and GPU model in the issue ([contributing](../../CONTRIBUTING.md)).

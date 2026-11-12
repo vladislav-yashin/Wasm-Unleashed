@@ -1018,7 +1018,7 @@ fn native_test_sav_round_trips_byte_for_byte() {
     assert_eq!(out, data, "SaveFile::write() must reproduce the genuine file exactly");
 }
 
-/// `madtables.bin` (what `make_app.sh --with-data` bundles instead of `nfs5.exe`) round-trips the
+/// `madtables.bin` (what `make web-data` serves instead of `nfs5.exe`) round-trips the
 /// tables read out of the executable exactly.
 #[test]
 fn mad_tables_blob_round_trips() {

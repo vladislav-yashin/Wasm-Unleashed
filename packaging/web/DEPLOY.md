@@ -1,4 +1,4 @@
-# Browser deployment
+# Wasm Unleashed browser deployment
 
 This document describes the production deployment for the browser build. It
 uses GitHub Actions, GHCR, a restricted SSH key and a blue-green pair of nginx

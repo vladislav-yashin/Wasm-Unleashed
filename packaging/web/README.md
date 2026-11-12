@@ -1,7 +1,7 @@
-# Browser build
+# Wasm Unleashed browser build
 
-The engine now compiles to `wasm32-unknown-unknown`. Original resources are served
-via HTTP and presented to existing parsers through a preloaded virtual filesystem.
+The engine compiles to `wasm32-unknown-unknown` and is delivered as a browser game. Original resources are
+served via HTTP and presented to existing parsers through a preloaded virtual filesystem.
 Basic Firefox checks with original resources passed: main menu, profile creation
 and reload, quick race and Factory Driver launch, keyboard/touch controls, pause,
 Web Audio and original intro video. Full playthroughs and real mobile/WebGPU
@@ -91,7 +91,6 @@ only enabled by this diagnostic option; it is not part of the shipped game.
 
 Remaining acceptance: a complete quick race, career and mission, audio continuity,
 mobile memory/performance, context loss/recovery and persistent save round trips
-on real browsers with full original resources. Browser photos download the current canvas resolution; native high-resolution
-photo scales do not apply to this path.
+on real browsers with full original resources. Browser photos download the current canvas resolution.
 Future multiplayer needs a WebSocket transport and a UDP gateway; the existing
 wire protocol remains separate from browser asset delivery.

@@ -1,90 +1,74 @@
-# Сборка из исходников
+# Сборка и размещение
 
 [English](../en/building.md) | **Русский**
 
 ## Что нужно
 
-- Rust 1.95 или новее (`rustup`);
-- CMake 3.16 или новее и компилятор C (Xcode command line tools, Visual Studio build tools или `build-essential`):
-  библиотека контроллеров SDL3 (лицензия zlib) собирается из исходников, которые поставляет крейт `sdl3-src` (через
-  `sdl3-sys`), и линкуется статически, только джойстики / геймпады / отдача, так что ставить ничего в систему не нужно;
-- данные игры, как описано в разделе [данные игры](game-data.md);
-- Linux: пакеты для разработки `libasound2-dev libudev-dev libx11-dev libxkbcommon-dev libwayland-dev
-  libxcursor-dev libxrandr-dev libxi-dev libxinerama-dev libvulkan-dev pkg-config`.
+- Rust 1.95 или новее с целью `wasm32-unknown-unknown` (`rustup`);
+- CLI `wasm-bindgen` версии, совпадающей с `Cargo.lock`;
+- Python 3.11 или новее;
+- Node 22 или новее для тестов JavaScript;
+- Docker с плагином Compose — по желанию, для контейнерного образа и проверок развёртывания;
+- данные игры, как описано в разделе [данные игры](game-data.md).
 
-## Запуск
+## Сборка и локальный запуск
 
 ```sh
-cargo run --release -p open-unleashed                 # как оригинал: вступительные ролики, затем меню
-cargo run --release -p open-unleashed -- alps 993     # сразу в гонку (трасса, машина)
-cargo run --release -p open-unleashed -- --debug-menu # текстовое меню разработчика: быстрая гонка, карьера, миссии…
+make setup-web                 # добавить цель wasm и поставить подходящий wasm-bindgen CLI
+make web-data GAME_DIR=/path/to/game
+make build-web                 # собрать dist/ (WEB_BUILD_FLAGS=--debug — отладочная сборка)
+make serve                     # отдавать dist/ и web-data/ на http://127.0.0.1:8080
 ```
 
-## Тесты
+Те же шаги без `make`:
 
 ```sh
-cargo test --workspace
+rustup target add wasm32-unknown-unknown --toolchain stable
+cargo +stable install wasm-bindgen-cli --version <версия из Cargo.lock> --locked
+python3 tools/web/build.py
+python3 tools/web/serve.py --data web-data
+```
+
+`tools/web/build.py` проверяет, что установленный wasm-bindgen CLI совпадает с `Cargo.lock`, собирает цель
+`wasm32-unknown-unknown` и складывает браузерную оболочку в `dist/`. `make web-data` готовит данные игры
+только для чтения в `web-data/`; `make serve` отдаёт обе папки и выставляет правильные MIME-типы для
+модулей WebAssembly.
+
+Запуск в контейнере:
+
+```sh
+docker compose -f packaging/web/compose.yaml up --build
+```
+
+Откройте `http://127.0.0.1:8080`. Папки по умолчанию — `dist/` и `web-data/`.
+
+## Тесты и проверки
+
+```sh
+make test                      # тесты Rust и веба
+make check-wasm                # cargo check для wasm32
+make check-deploy              # проверка скриптов развёртывания и compose
+make ci                        # все проверки выше
+make fmt-check                 # форматирование Rust
+```
+
+Те же команды напрямую:
+
+```sh
+cargo +stable check --locked -p open-unleashed --target wasm32-unknown-unknown
+cargo +stable test --locked -p nfs-formats -p nfs-net --lib
+python3 -m unittest discover -s tools/web -p 'test_*.py'
+node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs
 ```
 
 Тесты, которым нужны данные оригинала, пропускаются, если игра не найдена.
 
-## Архивы релизов
+## Сборка для размещения
 
-```sh
-packaging/build_macos.sh      # универсальное приложение для macOS (arm64 + x86_64)
-packaging/build_windows.sh    # Windows x64, кросс-сборка в Docker (+ официальный DirectX Shader Compiler: dxcompiler.dll, dxil.dll рядом с exe)
-packaging/build_linux.sh      # Linux x86_64, сборка в Docker
-```
-
-Архивы появляются в `target/dist/`. В них движок, пустая папка `game/` с инструкцией, `LICENSE.txt` и
-`THIRD-PARTY-LICENSES.txt` — и никогда ни одного файла оригинальной игры.
-
-## Параметры командной строки
-
-| Параметр | Что делает |
-|---|---|
-| `<трасса> <машина>` | сразу в гонку, например `alps 993` |
-| `--opponents <n>`, `--laps <n>`, `--backwards`, `--quick-knockout` | соперники, круги, направление, нокаут по кругам в быстрой гонке |
-| `--career <id турнира>` | следующий этап этого турнира «Эволюции» из сохранённой карьеры |
-| `--mission` | текущее задание «Гонщика-испытателя» (`NFS_MISSION=<номер>` — выбрать конкретное) |
-| `--replay <файл>` | воспроизвести сохранённый повтор |
-| `--fe=<экран>` | открыть меню на нужном экране (`garage`, `carcompare`, …) |
-| `--debug-menu` | текстовое меню разработчика |
-| `--autotest <с> [--follow]` | ехать `с` секунд без окна и выйти (для тестов) |
-| `--screenshot <png>` | отрисовать один кадр в файл |
-| `--record <csv>` | управление и состояние машины по тикам (для тестов) |
-| `--layout <экран>` | отрисовать экран меню и пройти его кнопки (для тестов) |
-
-## Переменные окружения
-
-| Переменная | Что делает |
-|---|---|
-| `NFS5_GAME_PATH=<папка>` | папка с данными игры |
-| `NFS5_SAVE_DIR=<папка>` | папка сохранений |
-| `NFS_TRAFFIC=0..3`, `NFS_TRAFFIC_SEED=<n>` | плотность трафика (нет / мало / средне / много), повторяемое появление машин |
-| `NFS_NO_CARCOL=1` | без столкновений машин друг с другом |
-| `NFS_DEMO=1` | частота кадров, видеокарта, графический API и система в заголовке окна; окно поверх остальных (для записи) |
-| `NFS_AUTOPILOT=1` с `--follow` | оконная гонка едет сама (для записи); `NFS_AUTOPILOT=ai` — машину игрока ведёт ИИ соперников |
-| `NFS_AI_TRACE=<номер>` | трассировка одной машины ИИ в журнале раз в четверть секунды |
-| `NFS_PHOTO_DIR=<папка>` | куда фото-режим сохраняет снимки (по умолчанию `Изображения/PorscheUnleashed`) |
-| `NFS_MIC=1` | голосовой чат с микрофона: в сетевой игре ваш голос с устройства ввода по умолчанию передаётся остальным игрокам, как в оригинале. По умолчанию выключено (голос других слышен всегда) |
-| `WGPU_BACKEND=vulkan`/`gl`/`dx12`/`metal` | графический API (по умолчанию Vulkan / Metal / Direct3D 12, OpenGL — только без них) |
-| `NFS_GPU_PROFILE=1` | время каждого прохода на GPU в журнале, раз в 120 кадров (диагностика; замедляет кадр). `NFS_GPU_PROFILE=minimal` просит у видеокарты простое устройство без необязательных возможностей |
-| `NFS_GUARD=0`/`1` | защита от сбоя при запуске (см. [установка](install.md)): в обычном релизном запуске включена, `0` выключает, `1` включает принудительно |
-
-## `nfs5.ini`
-
-Порт читает `nfs5.ini` патча Verok из папки с данными игры (рядом с `nfs5.exe`) с теми же ключами, значениями по умолчанию и действием, что у пропатченного оригинала; без файла действуют значения по умолчанию. Секция `[NFS5]`:
-
-| Ключ (по умолчанию) | Что делает |
-|---|---|
-| `Language=English` | `English`, `French`, `German`, `Italian`, `Spanish`, `Swedish`, `PortBrzl` (регистр любой); всё прочее — английский |
-| `NoMovies=0` | 1 пропускает вступительные ролики |
-| `Fog=1` | 0 выключает погодный туман |
-| `Filtering=1` | 0 — текстуры выбираются по ближайшему тексельному значению вместо билинейной фильтрации |
-| `CarControl=0` | 1 оставляет руль, газ и тормоз живыми после финиша машины игрока |
-
-`ThrashDriver`, `WindowedMode`, `SingleProcAffinity`, `CpuLimit` и `NoErrorReporting` относятся к запуску оригинала под Windows / Direct3D и игнорируются.
+`make build-web` складывает браузерную сборку в `dist/`: `index.html`, браузерные модули и пакет
+wasm-bindgen. Файлов оригинальной игры там нет. Подготовленная папка `web-data/` отдаётся отдельно и
+монтируется только для чтения; промышленное развёртывание, HTTPS через Caddy и схема blue-green описаны в
+[развёртывании](../../packaging/web/DEPLOY.md).
 
 ## Устройство кода
 
@@ -94,7 +78,8 @@ packaging/build_linux.sh      # Linux x86_64, сборка в Docker
 | `nfs-assets` | поиск данных игры, трассы, машины, текстуры |
 | `nfs-physics` | модель машины, столкновения |
 | `nfs-game` | логика гонки, ИИ, трафик, полиция, карьера, меню |
-| `nfs-renderer` | рендер на wgpu, повторяющий картинку оригинала |
+| `nfs-renderer` | рендер на wgpu, повторяющий картинку оригинала на WebGPU и WebGL2 |
 | `nfs-audio`, `nfs-input`, `nfs-net` | звук, управление и обратная связь, сетевой протокол |
-| `open-unleashed` | само приложение игры |
-| `tools/` | просмотрщики и распаковщики ресурсов |
+| `open-unleashed` | приложение игры и запуск в браузере |
+| `packaging/web` | браузерная оболочка, источник ресурсов, виртуальная файловая система и сохранения |
+| `tools/web` | сборка, упаковка ресурсов, локальный сервер и браузерные проверки |

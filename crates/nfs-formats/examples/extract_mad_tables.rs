@@ -1,5 +1,5 @@
-//! Writes the MAD decoder's tables out of `nfs5.exe` into the small `madtables.bin` a self-contained
-//! app bundle carries instead of the executable (`packaging/make_app.sh --with-data`).
+//! Writes the MAD decoder's tables out of `nfs5.exe` into the small `madtables.bin` the browser
+//! build serves instead of the executable (staged by `make web-data`).
 //! Usage: `extract_mad_tables <nfs5.exe> <out/madtables.bin>`.
 fn main() {
     let mut a = std::env::args().skip(1);

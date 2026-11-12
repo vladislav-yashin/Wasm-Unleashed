@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time server setup for the OpenUnleashed web deployment.
+# One-time server setup for the Wasm Unleashed web deployment.
 #
 # This generated script is self-contained: it embeds the production compose
 # file, the restricted remote deploy helper, and the default deploy.env.
@@ -109,7 +109,7 @@ fi
 cat <<EOF
 
 ====================================================
-OpenUnleashed deploy setup is complete.
+Wasm Unleashed deploy setup is complete.
 
 GitHub production environment secrets:
 

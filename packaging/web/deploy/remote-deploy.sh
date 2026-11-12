@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Remote deployment helper for the OpenUnleashed web build.
+# Remote deployment helper for the Wasm Unleashed web build.
 #
 # Install as /usr/local/bin/open-unleashed-deploy and restrict the CI SSH key to
 # this command, for example:

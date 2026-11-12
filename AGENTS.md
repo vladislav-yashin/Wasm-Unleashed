@@ -2,11 +2,11 @@
 
 ## Project and priorities
 
-OpenUnleashed is a Rust reimplementation of Need for Speed: Porsche Unleashed.
-The primary delivery target is a self-contained browser game compiled to
-`wasm32-unknown-unknown`. Desktop and mobile browsers are in scope. Native game
-builds are not a release requirement; native CLI tools remain useful for asset
-preparation. Browser multiplayer is deferred to a later stage.
+Wasm Unleashed is a Rust reimplementation of Need for Speed: Porsche Unleashed.
+The delivery target is a self-contained browser game compiled to
+`wasm32-unknown-unknown`. Desktop and mobile browsers are in scope. Native CLI
+tools remain useful for asset preparation. Browser multiplayer is deferred to a
+later stage.
 
 Preserve the original game rules, physics, AI, file formats and save compatibility.
 Keep platform changes separate from gameplay changes. Write code comments,

@@ -4,9 +4,8 @@
 //! (0x516950) and the session goes on without capture. Here the default input device of the audio
 //! backend (cpal) is opened at its own rate and the samples are brought to 8000 Hz mono by
 //! averaging each 1/8000 s of input (the port's own converter; DirectSound's is not in the image).
-//! No device, a refused permission (macOS: the app needs `NSMicrophoneUsageDescription`, see
-//! `packaging/make_app.sh`) or an unsupported sample format all give `None`: no capture, as when
-//! the original's open fails.
+//! No device, a refused browser permission or an unsupported sample format all give `None`: no
+//! capture, as when the original's open fails.
 //!
 //! **PORT-DEVIATION D39**: the microphone stays closed unless the player asks for it with `NFS_MIC=1`
 //! (the original opens it in every established session; owner decision 2026-10-22, privacy: the voice

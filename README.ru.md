@@ -1,50 +1,48 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="packaging/brand/mark-dark.svg">
-    <img src="packaging/brand/mark-light.svg" alt="OpenUnleashed" width="180">
-  </picture>
-</p>
-
-<h1 align="center">OpenUnleashed</h1>
+<h1 align="center">Wasm Unleashed</h1>
 
 <p align="center"><a href="README.md">English</a> | <b>Русский</b></p>
 
-Неофициальная открытая реализация движка **Need for Speed: Porsche Unleashed** (PC, 2000). Работает нативно на
-macOS (Apple Silicon и Intel), Windows и Linux — без Wine, эмуляторов и оригинального exe — и играется как
-оригинал: физика, соперники и трафик, карьера «Эволюция», «Гонщик-испытатель», оригинальные меню и сетевые гонки,
-в том числе против оригинальной игры.
+Неофициальная открытая браузерная реализация движка **Need for Speed: Porsche Unleashed** (PC, 2000).
+Работает в современных настольных и мобильных браузерах из WebAssembly: без установки, Wine, эмуляторов и
+оригинального exe. Физика, соперники и трафик, карьера «Эволюция», «Гонщик-испытатель» и оригинальные меню
+играются как в оригинале. Данные игры загружаются по HTTP, прогресс хранится в IndexedDB браузера.
 
-Независимая реализация, написанная с нуля на Rust (winit + wgpu) и воспроизводящая поведение оригинала.
+Независимая реализация, написанная с нуля на Rust (wgpu с WebGPU и WebGL2) и воспроизводящая поведение
+оригинала.
 
-> **Нужна своя копия игры.** Ни одного файла оригинальной игры нет ни в репозитории, ни в релизах.
-> Проект не связан с Electronic Arts, Eden Games и Porsche AG; «Need for Speed» и «Porsche» — товарные знаки их
-> владельцев и упоминаются здесь только для того, чтобы сказать, для какой игры этот движок.
+> **Нужна своя копия игры.** Ни одного файла оригинальной игры нет ни в репозитории, ни в сборках.
+> Проект не связан с Electronic Arts, Eden Games и Porsche AG; «Need for Speed» и «Porsche» — товарные знаки
+> их владельцев и упоминаются здесь только для того, чтобы сказать, для какой игры этот движок.
 
-## Браузер (WASM)
+## Игра в браузере
 
-Сборка и запуск браузерной версии: [инструкция по сборке и размещению](packaging/web/README.md). Данные игры загружаются по HTTP, прогресс сохраняется в IndexedDB. Мультиплеер запланирован отдельным этапом.
+Движок компилируется в `wasm32-unknown-unknown` и полностью работает в браузере. Откройте размещённую
+сборку или подготовьте и запустите свою копию: [сборка и размещение в браузере](packaging/web/README.md).
+Мультиплеер запланирован отдельным этапом и в браузерной сборке пока недоступен.
 
 ## Документация
 
 | | Русский | English |
 |---|---|---|
-| Установка и первый запуск | [docs/ru/install.md](docs/ru/install.md) | [docs/en/install.md](docs/en/install.md) |
-| Куда положить данные игры | [docs/ru/game-data.md](docs/ru/game-data.md) | [docs/en/game-data.md](docs/en/game-data.md) |
+| Первый запуск, сохранения и решение проблем | [docs/ru/install.md](docs/ru/install.md) | [docs/en/install.md](docs/en/install.md) |
+| Подготовка данных игры | [docs/ru/game-data.md](docs/ru/game-data.md) | [docs/en/game-data.md](docs/en/game-data.md) |
 | Управление | [docs/ru/controls.md](docs/ru/controls.md) | [docs/en/controls.md](docs/en/controls.md) |
-| Сборка из исходников, параметры | [docs/ru/building.md](docs/ru/building.md) | [docs/en/building.md](docs/en/building.md) |
+| Сборка и размещение | [docs/ru/building.md](docs/ru/building.md) | [docs/en/building.md](docs/en/building.md) |
 
 ## Быстрый старт
 
-1. Скачайте архив для своей системы из раздела релизов.
-2. Скопируйте папки `GameData` и `FEData` из установленной игры в папку `game` из архива.
-3. Запустите `OpenUnleashed` (на macOS — `OpenUnleashed.app`).
+Чтобы запустить игру у себя:
 
-Подробности и решение проблем — в [инструкции по установке](docs/ru/install.md).
+1. Поставьте цель wasm и подходящий wasm-bindgen CLI: `make setup-web`.
+2. Подготовьте данные оригинальной игры: `make web-data GAME_DIR=/path/to/game`.
+3. Соберите браузерную версию: `make build-web`.
+4. Запустите локальный сервер: `make serve`, затем откройте `http://127.0.0.1:8080`.
+
+Подробности и требования к размещению: [браузерная сборка](packaging/web/README.md).
 
 ## Лицензия
 
-GNU General Public License v3.0 или новее ([LICENSE](LICENSE)). Сторонние компоненты сохраняют свои лицензии;
-их список — в файле `THIRD-PARTY-LICENSES.txt` в архивах релизов.
+GNU General Public License v3.0 или новее ([LICENSE](LICENSE)). Сторонние компоненты сохраняют свои лицензии.
 
 ## Участие
 
@@ -52,7 +50,8 @@ GNU General Public License v3.0 или новее ([LICENSE](LICENSE)). Стор
 
 ## Благодарности
 
+Wasm Unleashed — форк проекта **OpenUnleashed**. Спасибо его автору fussraider и всем, кто участвовал в
+исходной реализации.
+
 Неофициальному патчу 1.0.6 от Verok: его исправления оригинального exe этот движок воспроизводит там, где они
 меняют поведение игры.
-
-*OpenUnleashed — рабочее название.*

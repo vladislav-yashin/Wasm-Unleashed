@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time server setup for the OpenUnleashed web deployment.
+# One-time server setup for the Wasm Unleashed web deployment.
 #
 # This generated script is self-contained: it embeds the production compose
 # file, the restricted remote deploy helper, and the default deploy.env.
@@ -98,7 +98,7 @@ chmod 0644 "$COMPOSE_FILE"
 
 cat > "$DEPLOY_SCRIPT" <<'OPEN_UNLEASHED_REMOTE_EOF'
 #!/usr/bin/env bash
-# Remote deployment helper for the OpenUnleashed web build.
+# Remote deployment helper for the Wasm Unleashed web build.
 #
 # Install as /usr/local/bin/open-unleashed-deploy and restrict the CI SSH key to
 # this command, for example:
@@ -379,7 +379,7 @@ if [[ -f "$ENV_FILE" ]]; then
     echo "Keeping existing $ENV_FILE."
 else
 cat > "$ENV_FILE" <<'OPEN_UNLEASHED_ENV_EOF'
-# Server-side configuration for the OpenUnleashed web deployment.
+# Server-side configuration for the Wasm Unleashed web deployment.
 # Installed as /etc/open-unleashed/deploy.env. Contains no secrets.
 
 # Prepared original game data. Mounted read-only into both containers.
@@ -453,7 +453,7 @@ fi
 cat <<EOF
 
 ====================================================
-OpenUnleashed deploy setup is complete.
+Wasm Unleashed deploy setup is complete.
 
 GitHub production environment secrets:
 

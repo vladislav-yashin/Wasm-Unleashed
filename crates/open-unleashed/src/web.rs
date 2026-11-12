@@ -104,7 +104,7 @@ fn smoke() {
     EventLoop::new().expect("smoke event loop").spawn_app(Smoke);
 }
 
-#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function nfsReportState(mode,paused,speed){document.documentElement.dataset.speed=String(speed);if(document.documentElement.dataset.gameMode!==mode)document.documentElement.dataset.gameMode=mode;document.documentElement.dataset.paused=String(paused)} export function nfsDownloadFrame(){document.querySelector('canvas').toBlob(blob=>{if(!blob){globalThis.nfsFatal?.('Photo export failed');return}const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='OpenUnleashed.png';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)})}")]
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function nfsReportState(mode,paused,speed){document.documentElement.dataset.speed=String(speed);if(document.documentElement.dataset.gameMode!==mode)document.documentElement.dataset.gameMode=mode;document.documentElement.dataset.paused=String(paused)} export function nfsDownloadFrame(){document.querySelector('canvas').toBlob(blob=>{if(!blob){globalThis.nfsFatal?.('Photo export failed');return}const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='WasmUnleashed.png';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)})}")]
 extern "C" { fn nfsReportState(mode: &str, paused: bool, speed: f32); fn nfsDownloadFrame(); }
 pub fn report_state(mode: &str, paused: bool, speed: f32) { nfsReportState(mode, paused, speed); }
 pub fn download_frame() { nfsDownloadFrame(); }

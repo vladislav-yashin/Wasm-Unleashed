@@ -5,7 +5,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Network races use UDP port 9442. / Сетевые гонки идут через UDP-порт 9442.
+        Network play is planned for a later stage and is not available in the browser build yet.
+        This template is for protocol work and future browser multiplayer. / Сетевая игра запланирована отдельным этапом и в браузерной сборке пока недоступна. Шаблон — для работы над протоколом и будущего мультиплеера.
         **Never attach files of the original game.** / **Не прикладывайте файлы оригинальной игры.**
   - type: textarea
     id: what
@@ -18,8 +19,8 @@ body:
     attributes:
       label: Players / Игроки
       options:
-        - OpenUnleashed with OpenUnleashed
-        - OpenUnleashed with the original game / с оригинальной игрой
+        - Wasm Unleashed with Wasm Unleashed
+        - Wasm Unleashed with the original game / с оригинальной игрой
     validations:
       required: true
   - type: input
@@ -30,12 +31,12 @@ body:
   - type: input
     id: version
     attributes:
-      label: Version and systems / Версия и системы
-      description: Archive or commit, and each player's OS. / Архив или коммит и ОС каждого игрока.
+      label: Version and browsers / Версия и браузеры
+      description: Build or commit, and each player's browser. / Сборка или коммит и браузер каждого игрока.
     validations:
       required: true
   - type: textarea
     id: log
     attributes:
-      label: open-unleashed.log (host and client / хост и клиент)
+      label: Browser console / Консоль браузера (host and client / хост и клиент)
       render: text

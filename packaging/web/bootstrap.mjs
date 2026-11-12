@@ -80,7 +80,7 @@ document.querySelector('#fullscreen').onclick = async () => {
 document.querySelector('#export').onclick = () => {
   if (!fs) return;
   const url = URL.createObjectURL(new Blob([fs.exportSaves()], {type:'application/json'}));
-  const link = document.createElement('a'); link.href = url; link.download = 'open-unleashed-saves.json'; link.click();
+  const link = document.createElement('a'); link.href = url; link.download = 'wasm-unleashed-saves.json'; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 document.querySelector('#import').onchange = async event => {
