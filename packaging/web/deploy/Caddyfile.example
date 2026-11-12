@@ -1,0 +1,30 @@
+# Example Caddy configuration for the blue-green deployment.
+#
+# The upstream order matters: blue is always first. With lb_policy first,
+# Caddy sends all traffic to the first healthy upstream and only fails over to
+# green when blue is unhealthy or draining. This lets the deploy script switch
+# versions without load balancing traffic across two builds.
+porsche.nfs.place {
+	reverse_proxy 127.0.0.1:18080 127.0.0.1:18081 {
+		lb_policy first
+
+		# Active health checks make the drain step deterministic.
+		health_uri /healthz
+		health_interval 2s
+		health_timeout 1s
+		health_fails 2
+		health_passes 1
+
+		# Hold requests briefly while the other upstream is selected.
+		lb_try_duration 10s
+		lb_try_interval 100ms
+		fail_duration 10s
+
+		# Keep Caddy's idle upstream connections shorter than nginx's
+		# keepalive_timeout (65s), otherwise a reused idle connection can
+		# produce an occasional 502.
+		transport http {
+			keepalive 30s
+		}
+	}
+}

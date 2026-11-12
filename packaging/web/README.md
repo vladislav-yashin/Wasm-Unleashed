@@ -15,20 +15,28 @@ Use Rust stable >= 1.95, Python >= 3.11 and Node >= 22 for the JS tests.
 rustup target add wasm32-unknown-unknown --toolchain stable
 cargo +stable install wasm-bindgen-cli --version 0.2.129 --locked
 python3 tools/web/build.py
-python3 tools/web/pack.py /path/to/original/game web-data
-# Optional: include movie tables and original front-end configuration:
-python3 tools/web/pack.py /path/to/game web-data --movie-exe /path/to/original/PORSCHE.ICD --extra-file /path/to/original/fe.txt
+# The target stages GameData, FEData, root configuration and derives the movie
+# tables. It validates the installation's executables and uses the first
+# compatible one.
+make web-data GAME_DIR=/path/to/original/game
+# Optional: override the movie executable and add a root file outside GAME_DIR:
+make web-data GAME_DIR=/path/to/game MOVIE_EXE=/path/to/original/Porsche.exe EXTRA_FILES=/path/to/original/extra.txt
 # Start from the repository root:
 docker compose -f packaging/web/compose.yaml up --build
 ```
 
+`make help` lists the local build, serve, docker, test and deployment-validation
+targets, including `make build-web`, `make serve`, `make test` and
+`make check-deploy`.
+
 Open http://localhost:8080. For remote devices, put the service behind HTTPS;
 secure context browser APIs require it. Localhost is suitable for development.
 For local development without Docker, run `python3 tools/web/serve.py` and open
-http://127.0.0.1:8080. For production, put `dist/` behind a static HTTP server and
-mount the prepared `web-data/` directory at `/data/`. Never serve the repository or original
-installation directly. `?data=https://example.test/data/` changes the resource
-base URL; a different origin must supply CORS headers.
+http://127.0.0.1:8080. For production, use the blue-green deployment described in
+[`DEPLOY.md`](DEPLOY.md): the image is served on loopback and Caddy terminates
+HTTPS. Mount the prepared `web-data/` directory at `/data/`. Never serve the
+repository or original installation directly. `?data=https://example.test/data/`
+changes the resource base URL; a different origin must supply CORS headers.
 
 `build.py --debug` produces a larger development build. The build checks that the
 wasm-bindgen CLI version matches Cargo.lock. `smoke.html` initializes the renderer
@@ -38,10 +46,12 @@ without original game resources; it is a diagnostic page, not a gameplay test.
 
 The manifest contains case-insensitive paths, sizes, groups and SHA-256 hashes.
 Content-addressed objects are independently fetched, verified and cached.
+The `--from-installation` path copies only `GameData/`, `FEData/`, `fe.txt`,
+`version.txt`, `nfs5.ini` (when present), and the derived `madtables.bin`; other
+root files such as the original executable, DLLs or `Backup/` are ignored.
 `--movie-exe` extracts the small `madtables.bin` using the existing Rust parser;
-the executable is not published. Without these tables original videos are skipped. Root
-installation files are included because configuration and movie-table loaders
-use them. Original data is not included in this repository or the web build.
+the executable itself is not published. Without these tables original videos
+are skipped. Original data is not included in this repository or the web build.
 
 The initial load includes front-end, cars, simulation, short sounds and the starting
 Alps track. Quick races load the selected track before changing game state;

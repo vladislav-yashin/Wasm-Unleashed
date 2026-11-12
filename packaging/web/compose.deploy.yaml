@@ -1,0 +1,43 @@
+# Production compose file for blue-green deployment.
+#
+# The deploy script runs one of these services at a time. Caddy on the host
+# proxies to both loopback ports, with 127.0.0.1:18080 first and
+# 127.0.0.1:18081 as the failover upstream. Both bind only to loopback; no
+# application port is reachable from outside the host.
+name: open-unleashed
+
+x-game: &game
+  image: ${OPEN_UNLEASHED_IMAGE:?OPEN_UNLEASHED_IMAGE must be set by the deploy script}
+  volumes:
+    - ${NFS_WEB_DATA:-/srv/open-unleashed/web-data}:/usr/share/nginx/html/data:ro
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=16m
+    - /var/cache/nginx:rw,noexec,nosuid,size=32m
+    - /run:rw,noexec,nosuid,size=8m
+  security_opt:
+    - no-new-privileges:true
+  stop_grace_period: 30s
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  healthcheck:
+    test: ["CMD", "wget", "-q", "-T", "2", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+    interval: 10s
+    timeout: 3s
+    retries: 3
+    start_period: 10s
+
+services:
+  blue:
+    <<: *game
+    ports:
+      - "127.0.0.1:${BLUE_PORT:-18080}:8080"
+
+  green:
+    <<: *game
+    ports:
+      - "127.0.0.1:${GREEN_PORT:-18081}:8080"

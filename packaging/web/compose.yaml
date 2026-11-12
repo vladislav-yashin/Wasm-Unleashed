@@ -4,7 +4,7 @@ services:
       context: ../..
       dockerfile: packaging/web/Dockerfile
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       - ${NFS_WEB_DATA:-../../web-data}:/usr/share/nginx/html/data:ro
     restart: unless-stopped

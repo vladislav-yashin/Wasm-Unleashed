@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# One-time server setup for the OpenUnleashed web deployment.
+#
+# This generated script is self-contained: it embeds the production compose
+# file, the restricted remote deploy helper, and the default deploy.env.
+# Copy only this file to the server and run it as root:
+#
+#   sudo OPEN_UNLEASHED_SSH_HOST=your.host.example bash setup-server.sh
+#
+# The embedded copies are checked against packaging/web/compose.deploy.yaml,
+# packaging/web/deploy/remote-deploy.sh and
+# packaging/web/deploy/deploy.env.example in CI.
+
+set -euo pipefail
+umask 077
+
+if [[ $EUID -ne 0 ]]; then
+    echo "Run this script as root: sudo bash setup-server.sh" >&2
+    exit 1
+fi
+
+DEPLOY_USER="open-unleashed-deployer"
+DEPLOY_SCRIPT="/usr/local/bin/open-unleashed-deploy"
+COMPOSE_DIR="/opt/open-unleashed"
+COMPOSE_FILE="$COMPOSE_DIR/compose.yaml"
+ENV_DIR="/etc/open-unleashed"
+ENV_FILE="$ENV_DIR/deploy.env"
+STATE_DIR="/var/lib/open-unleashed"
+DATA_DIR="/srv/open-unleashed/web-data"
+SSH_PORT="${OPEN_UNLEASHED_SSH_PORT:-22}"
+SSH_HOST="${OPEN_UNLEASHED_SSH_HOST:-}"
+
+command -v docker >/dev/null 2>&1 || { echo "docker is not installed" >&2; exit 1; }
+docker compose version >/dev/null 2>&1 || { echo "docker compose plugin is not installed" >&2; exit 1; }
+getent group docker >/dev/null 2>&1 || { echo "docker group does not exist" >&2; exit 1; }
+command -v flock >/dev/null 2>&1 || { echo "flock is not installed (util-linux)" >&2; exit 1; }
+
+if id "$DEPLOY_USER" >/dev/null 2>&1; then
+    echo "User $DEPLOY_USER already exists."
+else
+    useradd --create-home --shell /bin/bash "$DEPLOY_USER"
+    echo "Created user $DEPLOY_USER."
+fi
+
+usermod --append --groups docker "$DEPLOY_USER"
+
+install -d -m 0755 "$COMPOSE_DIR" "$ENV_DIR"
+install -d -m 0750 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$STATE_DIR"
+[[ -d /srv/open-unleashed ]] || install -d -m 0755 /srv/open-unleashed
+[[ -d "$DATA_DIR" ]] || install -d -m 0755 "$DATA_DIR"
+
+# @@EMBED_COMPOSE@@
+
+# @@EMBED_REMOTE@@
+
+if [[ -f "$ENV_FILE" ]]; then
+    echo "Keeping existing $ENV_FILE."
+else
+# @@EMBED_ENV@@
+    echo "Installed $ENV_FILE. Review the data path and ports."
+fi
+
+USER_HOME="$(getent passwd "$DEPLOY_USER" | cut -d: -f6)"
+SSH_DIR="$USER_HOME/.ssh"
+KEY_FILE="$SSH_DIR/id_ed25519"
+AUTHORIZED_KEYS="$SSH_DIR/authorized_keys"
+
+install -d -m 0700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$SSH_DIR"
+if [[ ! -f "$KEY_FILE" ]]; then
+    ssh-keygen -t ed25519 -N "" -f "$KEY_FILE" -C "open-unleashed-deploy" >/dev/null
+    echo "Created CI SSH key: $KEY_FILE"
+else
+    echo "Keeping existing CI SSH key: $KEY_FILE"
+fi
+
+if [[ ! -f "${KEY_FILE}.pub" ]]; then
+    ssh-keygen -y -f "$KEY_FILE" > "${KEY_FILE}.pub"
+fi
+
+PUBLIC_KEY="$(cat "${KEY_FILE}.pub")"
+RESTRICTED_ENTRY="restrict,command=\"$DEPLOY_SCRIPT\" $PUBLIC_KEY"
+
+touch "$AUTHORIZED_KEYS"
+# Remove any previous copy of this key, including unrestricted entries.
+if grep -qF "$PUBLIC_KEY" "$AUTHORIZED_KEYS"; then
+    grep -vF "$PUBLIC_KEY" "$AUTHORIZED_KEYS" > "$AUTHORIZED_KEYS.tmp" || true
+    mv "$AUTHORIZED_KEYS.tmp" "$AUTHORIZED_KEYS"
+fi
+printf '%s\n' "$RESTRICTED_ENTRY" >> "$AUTHORIZED_KEYS"
+chown "$DEPLOY_USER:$DEPLOY_USER" "$KEY_FILE" "${KEY_FILE}.pub" "$AUTHORIZED_KEYS"
+chmod 0600 "$KEY_FILE" "$AUTHORIZED_KEYS"
+chmod 0644 "${KEY_FILE}.pub"
+
+if [[ -z "$SSH_HOST" ]]; then
+    SSH_HOST="$(curl -fsS --max-time 5 https://ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')"
+fi
+
+if [[ -f /etc/ssh/ssh_host_ed25519_key.pub ]]; then
+    HOST_KEY="$(cat /etc/ssh/ssh_host_ed25519_key.pub)"
+    if [[ "$SSH_PORT" == "22" ]]; then
+        KNOWN_HOSTS="$SSH_HOST $HOST_KEY"
+    else
+        KNOWN_HOSTS="[$SSH_HOST]:$SSH_PORT $HOST_KEY"
+    fi
+else
+    KNOWN_HOSTS=""
+fi
+
+cat <<EOF
+
+====================================================
+OpenUnleashed deploy setup is complete.
+
+GitHub production environment secrets:
+
+DEPLOY_HOST=$SSH_HOST
+DEPLOY_USER=$DEPLOY_USER
+DEPLOY_SSH_PORT=$SSH_PORT
+DEPLOY_SSH_KEY:
+$(cat "$KEY_FILE")
+EOF
+
+if [[ -n "$KNOWN_HOSTS" ]]; then
+    cat <<EOF
+DEPLOY_KNOWN_HOSTS:
+$KNOWN_HOSTS
+EOF
+else
+    echo "DEPLOY_KNOWN_HOSTS: generate it on a trusted machine with"
+    echo "  ssh-keyscan -H -p $SSH_PORT $SSH_HOST"
+fi
+
+cat <<EOF
+====================================================
+
+Caddy upstreams for porsche.nfs.place:
+  127.0.0.1:18080  (blue)
+  127.0.0.1:18081  (green)
+
+Original game data must be prepared separately under:
+  $DATA_DIR
+
+The CI key is restricted to this command (the deploy user is in the docker
+group and needs no sudo):
+  $DEPLOY_SCRIPT
+
+After storing the private key in GitHub, remove it from the server:
+  rm $KEY_FILE
+
+The deploy user was added to the docker group. Log in again (or start a new
+SSH session) before using docker as $DEPLOY_USER.
+EOF
