@@ -63,13 +63,18 @@ pub fn primary_touch(touch: &winit::event::Touch) -> bool {
         true
     })
 }
+thread_local! { static REQUESTED_SIZE: Cell<Option<(u32, u32)>> = const { Cell::new(None) }; }
 pub fn resize(window: &Window) {
     let Some(browser) = web_sys::window() else { return };
     let width = browser.inner_width().ok().and_then(|v| v.as_f64()).unwrap_or(960.0);
     let height = browser.inner_height().ok().and_then(|v| v.as_f64()).unwrap_or(600.0);
     let scale = browser.device_pixel_ratio().min(1.5).min((1920.0 * 1080.0 / (width * height)).sqrt());
     let size = winit::dpi::PhysicalSize::new((width * scale).max(1.0) as u32, (height * scale).max(1.0) as u32);
-    if window.inner_size() != size { let _ = window.request_inner_size(size); }
+    // CSS controls the displayed canvas size. A request may therefore differ from
+    // winit's observed size; do not rewrite its style on every event-loop tick.
+    if REQUESTED_SIZE.with(|last| last.replace(Some((size.width, size.height)))) != Some((size.width, size.height)) {
+        let _ = window.request_inner_size(size);
+    }
 }
 
 #[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function nfsSmoke(){return location.pathname.endsWith('/smoke.html')} export function nfsSmokeDone(label){globalThis.nfsSmokeDone?.(label)}")]

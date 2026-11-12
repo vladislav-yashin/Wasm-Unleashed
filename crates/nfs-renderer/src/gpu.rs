@@ -290,6 +290,7 @@ pub(crate) struct Core {
     sprite_scratch: Vec<SpriteVertex>,
     /// the last submission of each of the frames still in flight, oldest first, and the newest
     /// submission of the frame being built ([`Self::frame_begin`])
+    #[cfg(not(target_arch = "wasm32"))]
     frames_in_flight: std::collections::VecDeque<wgpu::SubmissionIndex>,
     last_submit: Option<wgpu::SubmissionIndex>,
 }
@@ -300,6 +301,7 @@ pub(crate) struct Core {
 /// matters when presenting does not block (an occluded window on macOS hands out drawables without
 /// waiting), where wgpu-hal's Metal queue (4096 command buffers) would let thousands of frames —
 /// each holding its staging chunks — pile up (`RE/notes/PERF.md` PERF2).
+#[cfg(not(target_arch = "wasm32"))]
 const MAX_FRAMES_IN_FLIGHT: usize = 3;
 
 /// One lens-flare read-back in flight: the 4 × 4 block copied into `buf` (rows `LENS_ROW` bytes
@@ -1045,6 +1047,7 @@ impl Core {
             lens_staged: Vec::new(),
             object_scratch: Vec::new(),
             sprite_scratch: Vec::new(),
+            #[cfg(not(target_arch = "wasm32"))]
             frames_in_flight: std::collections::VecDeque::with_capacity(MAX_FRAMES_IN_FLIGHT + 1),
             last_submit: None,
         };
@@ -1115,9 +1118,15 @@ impl Core {
     /// submission joins the frames in flight, and once more than [`MAX_FRAMES_IN_FLIGHT`] are
     /// queued the oldest is waited for. Only the host's pacing: nothing drawn changes.
     pub(crate) fn frame_begin(&mut self) {
+        // Browser presentation is paced by requestAnimationFrame. Waiting for GPU work
+        // here blocks the UI thread on WebGL; WebGPU cannot synchronously wait at all.
+        #[cfg(target_arch = "wasm32")]
+        { self.last_submit = None; }
+        #[cfg(not(target_arch = "wasm32"))]
         if let Some(i) = self.last_submit.take() {
             self.frames_in_flight.push_back(i);
         }
+        #[cfg(not(target_arch = "wasm32"))]
         while self.frames_in_flight.len() > MAX_FRAMES_IN_FLIGHT {
             let oldest = self.frames_in_flight.pop_front().expect("non-empty");
             let _ = self.device.poll(wgpu::PollType::Wait { submission_index: Some(oldest), timeout: Some(nfs_platform::time::Duration::from_secs(1)) });
@@ -1240,7 +1249,7 @@ impl Core {
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
-        if width == 0 || height == 0 {
+        if width == 0 || height == 0 || (width == self.config.width && height == self.config.height) {
             return;
         }
         self.config.width = width;
@@ -2446,5 +2455,26 @@ mod adapter_choice_tests {
         assert!(!prefer_dx12_over(0x8086, D::DiscreteGpu, B::Vulkan)); // Arc
         assert!(!prefer_dx12_over(0x10de, D::DiscreteGpu, B::Vulkan)); // NVIDIA
         assert!(!prefer_dx12_over(0x1002, D::IntegratedGpu, B::Vulkan)); // AMD APU
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod browser_shader_tests {
+    #[test]
+    fn mesh_shader_validates_for_storage_and_uniform_objects() {
+        let source = include_str!("shader.wgsl");
+        let uniform = source
+            .replace("var<storage, read> objects: array<Object>;", "var<uniform> selected_object: Object;")
+            .replace("objects[inst]", "selected_object")
+            .replace("objects[in.obj]", "selected_object");
+        for (backend, source) in [("WebGPU", source), ("WebGL2", uniform.as_str())] {
+            let module = wgpu::naga::front::wgsl::parse_str(source)
+                .unwrap_or_else(|error| panic!("{backend}: {}", error.emit_to_string(source)));
+            wgpu::naga::valid::Validator::new(
+                wgpu::naga::valid::ValidationFlags::all(),
+                wgpu::naga::valid::Capabilities::all(),
+            ).validate(&module)
+                .unwrap_or_else(|error| panic!("{backend}: {}", error.emit_to_string(source)));
+        }
     }
 }

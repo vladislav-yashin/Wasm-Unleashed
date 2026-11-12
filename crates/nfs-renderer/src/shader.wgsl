@@ -459,10 +459,11 @@ fn shade(in: VsOut, layered: bool) -> vec4<f32> {
     if object.shadow_on.y > 0.5 && globals.headlight_on.y > 0.5 && in.head_w > 0.0 {
         lit = lit * uvlight(in.head_uvw);
     }
+    // Implicit derivatives must be evaluated before material-dependent control flow.
+    // `sh80` keeps its original material LOD bias of -1.
+    let shadow_uv = vec2<f32>(dot(object.shadow_u.xyz, in.world) + object.shadow_u.w, dot(object.shadow_v.xyz, in.world) + object.shadow_v.w);
+    let sh = textureSampleBias(t_proj, s_proj, shadow_uv, -1.0);
     if object.shadow_on.x > 0.5 {
-        let uv = vec2<f32>(dot(object.shadow_u.xyz, in.world) + object.shadow_u.w, dot(object.shadow_v.xyz, in.world) + object.shadow_v.w);
-        // `sh80`'s material asks for a LOD bias of −1 (`mt+0x40`, `RE/notes/thrash.md` §7)
-        let sh = textureSampleBias(t_proj, s_proj, uv, -1.0);
         if sh.a * 255.0 > 10.0 {
             if layered {
                 lit = lit * (1.0 - sh.a) + sh.rgb * light * sh.a;

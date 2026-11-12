@@ -71,7 +71,11 @@ start.addEventListener('click', async () => {
   finally { start.disabled = false; }
 });
 document.querySelector('#fullscreen').onclick = async () => {
-  try { await document.documentElement.requestFullscreen(); } catch { /* optional on mobile Safari */ }
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen();
+    document.querySelector('canvas')?.focus();
+  } catch { /* optional on mobile Safari */ }
 };
 document.querySelector('#export').onclick = () => {
   if (!fs) return;

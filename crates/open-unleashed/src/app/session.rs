@@ -48,6 +48,13 @@ impl App {
                 }
             }
         };
+        // Resize events may arrive while browser GPU initialization is still pending.
+        // Reconcile the surface before the first intro/menu frame uses it.
+        #[cfg(target_arch = "wasm32")]
+        {
+            let size = window.inner_size();
+            renderer.resize(size.width, size.height);
+        }
         // **The start-up movies**, 0x4DD600 (main 0x4B6C42, once, on the first entry to the front
         // end): `NOINTROMOVIES` `[0x65743C]` — `fe.txt`'s `nointromovies`, 0 in the shipped file —
         // is the original's own skip, and it skips the loading mosaic with them. A scripted run
