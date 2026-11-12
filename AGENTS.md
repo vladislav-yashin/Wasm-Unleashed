@@ -59,7 +59,8 @@ python3 tools/web/build.py
 For local play, run `python3 tools/web/serve.py` and open
 `http://127.0.0.1:8080`. The default directories are `dist/` and `web-data/`.
 Remote deployment needs HTTPS for browser APIs and CORS if assets use a separate
-origin.
+origin. Stop any local test server you started when the task is complete; do not
+stop a server owned by the user or another task.
 
 Keep browser gameplay testing basic unless explicitly requested otherwise.
 Check startup and the behavior affected by the change; leave extended

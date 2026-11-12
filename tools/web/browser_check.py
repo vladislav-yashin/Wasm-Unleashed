@@ -12,6 +12,7 @@ parser.add_argument('--url', default='http://127.0.0.1:8765/')
 parser.add_argument('--output', type=Path, default=Path('target/browser-check'))
 parser.add_argument('--actions', type=Path)
 parser.add_argument('--skip-intro', action='store_true')
+parser.add_argument('--profile-webgl', action='store_true', help='Record frame gaps and WebGL call times')
 parser.add_argument('--expect-mode', choices=['menu', 'race'])
 parser.add_argument('--seconds', type=int, default=45)
 args = parser.parse_args()
@@ -54,6 +55,8 @@ try:
             if mode == 'intro':
                 command('WebDriver:PerformActions', {'actions':[{'type':'key','id':'keyboard','actions':[{'type':'keyDown','value':'\ue00c'},{'type':'keyUp','value':'\ue00c'}]}]})
             time.sleep(1)
+    if args.profile_webgl:
+        script(Path(__file__).with_name('webgl_profile.js').read_text())
     if args.actions:
         for index, action in enumerate(json.loads(args.actions.read_text())):
             if 'wait' in action:
@@ -84,6 +87,9 @@ try:
         print(json.dumps(state, ensure_ascii=False), flush=True)
         (args.output / 'state.json').write_text(json.dumps(state, ensure_ascii=False, indent=2))
         time.sleep(5)
+    if args.profile_webgl:
+        profile = script('return window.nfsWebglProfile')
+        (args.output / 'webgl-profile.json').write_text(json.dumps(profile, indent=2))
     result = command('WebDriver:TakeScreenshot', {'id': None, 'full': False})
     (args.output / 'screen.png').write_bytes(base64.b64decode(result['value']))
     if state.get('errors'):

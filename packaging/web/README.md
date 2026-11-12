@@ -72,6 +72,13 @@ python3 -m unittest discover -s tools/web -p 'test_*.py'
 node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs
 ```
 
+For Firefox frame-pacing investigations, pass `--profile-webgl` to
+`tools/web/browser_check.py` with a running Marionette-enabled Firefox. The check
+writes `webgl-profile.json` under its output directory, recording frame gaps,
+WebGL call durations and long animation/timer callbacks. With `--skip-intro`,
+measurement starts after the intro skip. Instrumentation adds overhead and is
+only enabled by this diagnostic option; it is not part of the shipped game.
+
 Remaining acceptance: a complete quick race, career and mission, audio continuity,
 mobile memory/performance, context loss/recovery and persistent save round trips
 on real browsers with full original resources. Browser photos download the current canvas resolution; native high-resolution

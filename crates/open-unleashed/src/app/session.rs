@@ -54,6 +54,10 @@ impl App {
         {
             let size = window.inner_size();
             renderer.resize(size.width, size.height);
+            // Every intro/menu/race frame already requests its next redraw. Browser
+            // redraws use requestAnimationFrame; a parallel Poll loop only adds tasks
+            // between frames and competes with audio, input and presentation.
+            event_loop.set_control_flow(ControlFlow::Wait);
         }
         // **The start-up movies**, 0x4DD600 (main 0x4B6C42, once, on the first entry to the front
         // end): `NOINTROMOVIES` `[0x65743C]` — `fe.txt`'s `nointromovies`, 0 in the shipped file —
