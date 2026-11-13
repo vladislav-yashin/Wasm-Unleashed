@@ -69,6 +69,9 @@ Profiles, records and settings write into `/saves`, with periodic IndexedDB
 transactions. The toolbar reports whether writes reached persistent storage and
 supports JSON export/import. Import requires restarting the game to reload its
 in-memory profile. If persistence is unavailable, export before closing the page.
+**Exit** in the game's own front end flushes the saves, leaves browser fullscreen and returns
+to the site's home page; the page cannot close its own tab. Quitting a race from its pause
+menu returns to the game's front end.
 
 Keyboard, Browser Gamepad API and touch buttons feed existing controls. On-screen
 controls switch between a menu D-pad with OK/Back and larger race steering/pedal
@@ -116,7 +119,7 @@ the shell does not retranslate them.
 cargo +stable check -p open-unleashed --target wasm32-unknown-unknown --locked
 cargo +stable test -p nfs-formats -p nfs-net --lib
 python3 -m unittest discover -s tools/web -p 'test_*.py'
-node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs
+node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs packaging/web/exit-game.test.mjs
 ```
 
 For Firefox frame-pacing investigations, pass `--profile-webgl` to
@@ -135,12 +138,12 @@ wire protocol remains separate from browser asset delivery.
 
 ## Landing page and SEO
 
-The root page is an English landing page. Its play links explicitly select the
-English game shell with `?lang=en&autostart=1`. This begins loading immediately
-without a second Start click; a direct `game.html` visit retains the manual Start
-button. Automatic launch does not request fullscreen without a user gesture.
-Use the in-game fullscreen toolbar button when desired. The existing game shell is available at
-`game.html` (including its `?lang=`, `?data=` and other launch parameters).
+The root page is an English landing page. Its play links open the English game
+shell with `?lang=en`; resources are downloaded only after the player presses
+**Start** on the game page, so no network work starts before that click. Direct
+`game.html` visits behave the same way. Use the in-game fullscreen toolbar button
+when desired. The existing game shell is available at `game.html` (including its
+`?lang=`, `?data=` and other launch parameters).
 The landing page is rendered at build time and delivered as complete HTML by
 Nginx or the local server. All headings, links and FAQ answers work without
 JavaScript; no Node server or client hydration is needed. The game is loaded

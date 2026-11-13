@@ -22,7 +22,7 @@ impl App {
         match self.fe.dialog_answer.take() {
             // 0x50CC4F: "yes" to 811 is 0x4D56E0(0) — the front end is over
             Some((true, DialogFor::Quit)) => {
-                event_loop.exit();
+                self.quit_game(event_loop);
                 true
             }
             Some((yes, DialogFor::Offer(i))) => {
@@ -440,7 +440,7 @@ impl App {
                     self.hud_cfg_apply();
                 }
                 self.fe_sound(4);
-                event_loop.exit();
+                self.quit_game(event_loop);
             }
             Shown::Screen(n) => {
                 let closed = layers - self.fe.nav.layers.len();

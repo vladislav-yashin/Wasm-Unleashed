@@ -92,6 +92,13 @@ pub fn prepare_track(name: &str) -> bool {
 
 #[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function nfsFatal(message){globalThis.nfsFatal?.(message)}")]
 extern "C" { fn nfsFatal(message: &str); }
+
+/// Tell the browser shell that the player left the game through its own UI. The shell flushes the
+/// saves, leaves fullscreen and replaces the page with the site's home page; a browser page cannot
+/// close its own tab.
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function nfsExitGame(){globalThis.nfsExitGame?.()}")]
+extern "C" { fn nfsExitGame(); }
+pub fn exit_game() { nfsExitGame(); }
 thread_local! { static PRIMARY_TOUCH: Cell<Option<u64>> = const { Cell::new(None) }; }
 pub fn primary_touch(touch: &winit::event::Touch) -> bool {
     PRIMARY_TOUCH.with(|id| {

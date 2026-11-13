@@ -4,6 +4,7 @@ import { AssetSource } from './assets.mjs';
 import { VirtualFileSystem } from './vfs.mjs';
 import { apply, detectLocale, getLocale, onLocaleChange, setLocale, t } from './i18n.mjs';
 import { applyScale, storedScale } from './render-scale.mjs';
+import { leaveGame } from './exit-game.mjs';
 const status = document.querySelector('#status');
 const loader = document.querySelector('#loader');
 const start = document.querySelector('#start');
@@ -118,6 +119,9 @@ async function flush() {
   try { await fs.flush(); say(saveStatus, message(fs.dirty.size ? 'saves.saving' : 'saves.saved')); }
   catch (error) { say(saveStatus, message('saves.failed', {error: error.message})); }
 }
+// The in-game Exit command (`web.rs`'s `nfsExitGame`): save, leave fullscreen and return to the
+// site's home page. The WebAssembly instance cannot be restarted, so re-entering reloads the page.
+globalThis.nfsExitGame = () => { void leaveGame(globalThis, flush); };
 async function launch({ gesture = false } = {}) {
   if (launching && !retryTrack && !recovery) return;
   if (recovery) { location.reload(); return; }
@@ -205,6 +209,3 @@ new MutationObserver(() => {
   new MutationObserver(() => showRenderSize(canvas)).observe(canvas, {attributes:true, attributeFilter:['width', 'height']});
   showRenderSize(canvas);
 }).observe(document.body, {childList:true});
-
-// Landing links opt into immediate loading; a direct visit retains the manual Start button.
-if (new URLSearchParams(location.search).get('autostart') === '1') void launch();

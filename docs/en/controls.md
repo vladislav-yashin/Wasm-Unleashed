@@ -29,7 +29,9 @@ the bar is up (never while driving): d-pad / left stick picks, A answers, B goes
 The game runs in the browser canvas. The fullscreen button in the browser toolbar enters browser
 fullscreen; click the canvas first if the keyboard does not respond. Gamepads are read through the browser's
 Gamepad API and work after the first button press or stick movement; wheel force feedback is unavailable in
-the browser.
+the browser. **Exit** in the game's front end saves the progress, leaves browser fullscreen and returns
+to the site's home page; a page cannot close its own tab. Quitting a race from its pause menu returns to
+the game's front end.
 
 On touch devices an on-screen panel provides the essential controls: left / right steering, throttle, brake,
 handbrake, pause, camera and gear up / down. The panel is shown for coarse pointers and can be used together

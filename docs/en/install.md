@@ -24,6 +24,9 @@
    takes the whole page.
 5. The language selector in the toolbar switches the browser shell and remembers your choice; the shell
    follows the browser's language until then. The game's own text still comes from the installed data.
+6. To leave the game, use **Exit** in its front end and confirm. A browser page cannot close its own
+   tab, so the shell saves the progress, leaves browser fullscreen and returns to the site's home
+   page. Quitting a race from its pause menu returns to the game's front end, as in the original.
 
 The game data is served over HTTP and is read-only. Only progress and settings are written by the browser.
 

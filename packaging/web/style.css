@@ -71,3 +71,5 @@
 #loader[data-presentation="compact"] .loading-actions{grid-column:1/-1;margin-top:14px}
 #loader[data-presentation="compact"][data-state="loading"] .loading-actions{display:none}
 #loader[data-presentation="compact"] #loading-details{grid-column:1/-1;margin-top:14px}
+/* The player left through the in-game Exit: the shell is saving and returning home. */
+:root[data-game-mode="exited"] :is(canvas#game,#tools,#tools-toggle,#touch){display:none}

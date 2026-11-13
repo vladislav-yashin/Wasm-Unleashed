@@ -21,6 +21,12 @@ const MOVIES: [&str; 2] = ["earts-av.mad", "inPC-av.mad"];
 /// Before each movie, three blank flips (0x4DD6A2…0x4DD6C4 / 0x4DD54B…0x4DD56D).
 const BLANK_FLIPS: u32 = 3;
 
+/// A sound whose position has not moved for this long is treated as not playing. A browser page
+/// started without a user gesture keeps its `AudioContext` suspended: the mixer accepts voices,
+/// but their positions never advance, and the player's audio wait at the end of a movie would
+/// never finish — the next movie would never start. The picture then plays on the wall clock.
+const AUDIO_STALL_MS: i32 = 1500;
+
 struct Movie {
     data: Vec<u8>,
     video: Vec<std::ops::Range<usize>>,
@@ -29,6 +35,11 @@ struct Movie {
     voice: Option<nfs_audio::VoiceId>,
     size: (i32, i32),
     started: bool,
+    /// the last sound position seen and the moment it last moved
+    last_audio_pos: Option<i32>,
+    audio_moved_at: Option<Instant>,
+    /// the sound stopped advancing and was dropped; the rest of the movie is shown silently
+    audio_stalled: bool,
 }
 
 pub struct IntroRun {
@@ -97,7 +108,7 @@ impl IntroRun {
         let h = MadHeader::parse(&data[first]).ok()?;
         let dec = MadDecoder::new(tables, &h);
         let player = IntroPlayer::new(kinds, h.period);
-        Some(Movie { data, video, dec, player, voice: None, size: (h.width as i32, h.height as i32), started: false })
+        Some(Movie { data, video, dec, player, voice: None, size: (h.width as i32, h.height as i32), started: false, last_audio_pos: None, audio_moved_at: None, audio_stalled: false })
     }
 
     /// One redraw. `true` once both movies are over.
@@ -130,7 +141,7 @@ impl IntroRun {
         if self.blank > 0 {
             self.blank -= 1;
         } else if let Some(m) = self.movie.as_mut() {
-            let Movie { data, video, dec, player, voice, started, .. } = m;
+            let Movie { data, video, dec, player, voice, started, last_audio_pos, audio_moved_at, audio_stalled, .. } = m;
             let mut decode = |c: usize| {
                 let r = video[c].clone();
                 dec.decode_frame(nfs_formats::mad::with_run_on(data, r.start, r.len())).rgba
@@ -146,13 +157,40 @@ impl IntroRun {
                     let clip = nfs_audio::mixer::Clip { rate: pcm.rate, channels: pcm.channels, samples: pcm.samples, loop_range: None, gain: 1.0, bend_cents: 0, fx_send: pcm.fx_send, priority: nfs_audio::mixer::STREAM_PRIORITY, pan: pcm.pan, pan_scale: pcm.pan_scale, records: Vec::new(), layers: Vec::new(), tables: Vec::new() };
                     Some(a.play_word(Arc::new(clip), 1.0, nfs_audio::resample::PITCH_UNIT, 0x40, 0, false))
                 });
+                *last_audio_pos = None;
+                *audio_moved_at = Some(Instant::now());
+                *audio_stalled = false;
                 player.start(self.t0.elapsed().as_millis() as i32, voice.is_some());
             }
+            let now_ms = self.t0.elapsed().as_millis() as i32;
             // 0x566910's position (the frames mixed) less 0x56AFA0's latency (mixed and not yet
             // heard, `AudioOutput::latency_ms`) — 0x4DCC9E and the four other sync sites.
             // *(Until 2026-09-26 the port took the latency as 0.)*
-            let pos = voice.and_then(|v| audio.and_then(|a| Some(a.position_ms(v)? - a.latency_ms())));
-            let tick = Tick { now: self.t0.elapsed().as_millis() as i32, audio_pos: pos.unwrap_or(0), audio_done: pos.is_none() };
+            let raw_pos = voice.and_then(|v| audio.and_then(|a| Some(a.position_ms(v)? - a.latency_ms())));
+            // A suspended browser context parks the mixer on 0: the voice is queued, but its
+            // position never moves. Drop it and stop waiting for the sound instead of leaving the
+            // next movie unopened; a later user gesture makes the following movie audible.
+            if voice.is_some() && !*audio_stalled {
+                match raw_pos {
+                    Some(p) if *last_audio_pos != Some(p) => {
+                        *last_audio_pos = Some(p);
+                        *audio_moved_at = Some(Instant::now());
+                    }
+                    _ if audio_moved_at.is_some_and(|t| Instant::now().duration_since(t).as_millis() > AUDIO_STALL_MS as u128) => {
+                        *audio_stalled = true;
+                        tracing::info!("start-up movie: the sound stopped advancing, playing without sound sync");
+                    }
+                    _ => {}
+                }
+            }
+            if *audio_stalled
+                && let Some(v) = voice.take()
+                && let Some(a) = audio
+            {
+                a.stop(v);
+            }
+            let pos = if *audio_stalled { None } else { raw_pos };
+            let tick = Tick { now: now_ms, audio_pos: pos.unwrap_or(0), audio_done: pos.is_none() };
             let (keys, buttons) = (&mut self.keys, self.buttons);
             let mut skip = || keys.pop_front().unwrap_or(false) | buttons.iter().any(|b| *b);
             let shown = player.step(tick, &mut decode, &mut skip);

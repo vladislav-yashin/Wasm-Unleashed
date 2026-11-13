@@ -398,7 +398,7 @@ impl App {
                     self.paused = false;
                     self.pause_confirm = None;
                     if !self.leave_race() {
-                        event_loop.exit();
+                        self.quit_game(event_loop);
                     }
                 } else {
                     self.pause_confirm = None;

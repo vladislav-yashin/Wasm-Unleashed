@@ -72,7 +72,7 @@ impl App {
                     self.paused = false;
                     self.pause_confirm = None;
                     if !self.leave_race() {
-                        event_loop.exit();
+                        self.quit_game(event_loop);
                     }
                 }
                 (Some(_), _) => self.pause_confirm = None,
@@ -202,7 +202,7 @@ impl App {
                 self.pause_sel = 0;
                 self.pause_confirm = None;
             } else {
-                event_loop.exit();
+                self.quit_game(event_loop);
             }
         }
         // the pause orbit's step keys, read on the press only while a dialog is up outside

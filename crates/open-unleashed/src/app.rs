@@ -40,6 +40,7 @@ mod fe_callbacks;
 mod input;
 mod frame;
 mod events;
+mod lifecycle;
 mod scripted;
 mod pa_trace;
 pub(crate) use pa_trace::fe0_setup as pa_trace_fe0_setup;
