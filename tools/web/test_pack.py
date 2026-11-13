@@ -1,11 +1,27 @@
+import gzip
 import tempfile
 import unittest
 import struct
 from pathlib import Path
-from pack import prepare_from_installation, publish, stage_installation
+from pack import compress_object, prepare_from_installation, publish, stage_installation
 
 
 class PublishTests(unittest.TestCase):
+    def test_compressed_objects_preserve_content_and_are_deterministic(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / 'object'
+            data = b'original game resource' * 1000
+            target.write_bytes(data)
+            compress_object(target)
+            compressed = target.with_name('object.gz').read_bytes()
+            self.assertEqual(gzip.decompress(compressed), data)
+            self.assertEqual(target.read_bytes(), data)
+            compress_object(target)
+            self.assertEqual(target.with_name('object.gz').read_bytes(), compressed)
+            target.write_bytes(b'small')
+            compress_object(target)
+            self.assertFalse(target.with_name('object.gz').exists())
+
     def test_stable_manifest_and_content(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
@@ -51,6 +67,9 @@ class PublishTests(unittest.TestCase):
             manifest = publish(source, base / 'out')
             entry = manifest['files']['gamedata/music/zzzymus.viv']
             self.assertNotIn('url', entry)
+            for segment in entry['segments'][1:]:
+                target = base / 'out' / segment['url']
+                self.assertEqual(gzip.decompress(target.with_name(target.name + '.gz').read_bytes()), target.read_bytes())
             rebuilt = bytearray(entry['size'])
             for segment in entry['segments']:
                 data = (base / 'out' / segment['url']).read_bytes()

@@ -24,9 +24,31 @@ class Handler(SimpleHTTPRequestHandler):
                 return str(asset_root / '.missing')
             return str(target)
         return super().translate_path(path)
+    def send_head(self):
+        if urlsplit(self.path).path.startswith('/data/objects/'):
+            encodings = self.headers.get('Accept-Encoding', '').lower().split(',')
+            accepts_gzip = any(part.strip().split(';')[0] == 'gzip'
+                               and not any(param.strip() in ('q=0', 'q=0.0', 'q=0.00', 'q=0.000')
+                                           for param in part.split(';')[1:])
+                               for part in encodings)
+            target = Path(self.translate_path(self.path))
+            sidecar = target.with_name(target.name + '.gz')
+            if accepts_gzip and target.is_file() and sidecar.is_file():
+                stream = sidecar.open('rb')
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/octet-stream')
+                self.send_header('Content-Encoding', 'gzip')
+                self.send_header('Content-Length', str(sidecar.stat().st_size))
+                self.end_headers()
+                return stream
+        return super().send_head()
+
     def end_headers(self):
+        if urlsplit(self.path).path.startswith('/data/objects/'):
+            self.send_header('Vary', 'Accept-Encoding')
         self.send_header('Cache-Control', 'public, max-age=31536000, immutable' if urlsplit(self.path).path.startswith('/data/objects/') else 'no-cache')
         super().end_headers()
 
-print(f'Open http://{args.host}:{args.port}', flush=True)
-ThreadingHTTPServer((args.host, args.port), partial(Handler, directory=str(args.dist.resolve()))).serve_forever()
+server = ThreadingHTTPServer((args.host, args.port), partial(Handler, directory=str(args.dist.resolve())))
+print(f'Open http://{args.host}:{server.server_port}', flush=True)
+server.serve_forever()

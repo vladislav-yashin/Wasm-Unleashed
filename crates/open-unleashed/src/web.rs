@@ -1,4 +1,4 @@
-//! Browser lifecycle; network preparation is completed by the JS bootstrap before WASM starts.
+//! Browser lifecycle; the shell prepares startup resources before WASM and deferred assets before decoding.
 use crate::*;
 use std::cell::{Cell, RefCell};
 use winit::platform::web::{WindowAttributesExtWebSys, WindowExtWebSys};
@@ -89,6 +89,48 @@ pub fn prepare_track(name: &str) -> bool {
     });
     false
 }
+
+thread_local! { static MEDIA_RETRY: Cell<bool> = const { Cell::new(false) }; }
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function nfsFilesReady(paths){return globalThis.nfsFilesReady(paths)} export function nfsPrepareFiles(paths){return globalThis.nfsPrepareFiles(paths)}")]
+extern "C" {
+    fn nfsFilesReady(paths: &js_sys::Array) -> bool;
+    fn nfsPrepareFiles(paths: &js_sys::Array) -> js_sys::Promise;
+}
+
+/// Resolve optional original media using the manifest's case-insensitive directory
+/// view, then wait for every existing file before invoking a synchronous decoder.
+/// Missing original files retain the native front end's fallback behavior.
+pub fn prepare_frontend_files(paths: &GamePaths, directory: &str, names: &[String]) -> bool {
+    let dir = paths.fe_data().join(directory);
+    prepare_directory_files(&dir, names)
+}
+
+pub fn prepare_car_models(paths: &GamePaths, models: &[String]) -> bool {
+    let names: Vec<String> = models.iter()
+        .flat_map(|model| [".crp", ".tpg", "D.fsh", "L.fsh"].map(|suffix| format!("{model}{suffix}")))
+        .collect();
+    prepare_directory_files(&paths.car_model_dir(), &names)
+}
+
+fn prepare_directory_files(dir: &std::path::Path, names: &[String]) -> bool {
+    let files: js_sys::Array = names.iter()
+        .filter_map(|name| GamePaths::find_file(dir, name))
+        .map(|path| wasm_bindgen::JsValue::from_str(&path.to_string_lossy()))
+        .collect();
+    if nfsFilesReady(&files) { return true; }
+    if LOADING.with(|s| s.replace(true)) { return false; }
+    wasm_bindgen_futures::spawn_local(async move {
+        let result = wasm_bindgen_futures::JsFuture::from(nfsPrepareFiles(&files)).await;
+        LOADING.with(|s| s.set(false));
+        match result {
+            Ok(_) => MEDIA_RETRY.with(|r| r.set(true)),
+            Err(error) => nfsFatal(&format!("Media preparation failed: {error:?}")),
+        }
+    });
+    false
+}
+
+pub fn take_media_retry() -> bool { MEDIA_RETRY.with(|r| r.replace(false)) }
 
 #[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function nfsFatal(message){globalThis.nfsFatal?.(message)}")]
 extern "C" { fn nfsFatal(message: &str); }

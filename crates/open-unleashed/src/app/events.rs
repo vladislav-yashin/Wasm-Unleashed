@@ -284,6 +284,13 @@ impl ApplicationHandler for App {
             }
         }
         if crate::web::take_race_retry() { self.start_from_layout(event_loop); if let Some(window) = &self.window { window.request_redraw(); } }
+        if crate::web::take_media_retry() {
+            self.bind_car_logos();
+            self.bind_chronicle_icons();
+            self.bind_showcase_pictures();
+            self.bind_player_pictures();
+            if let Some(window) = &self.window { window.request_redraw(); }
+        }
         let mut field_id = String::new();
         let mut field = None;
         if self.intro.is_none() && (self.vehicle.is_none() || self.paused) {

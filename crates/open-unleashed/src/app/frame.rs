@@ -8,6 +8,11 @@ impl App {
     /// left the window blank for the whole front end.
     // PORT-DEVIATION D5 (RE/notes/PORT-DEVIATIONS.md): NFS_RENDER_THREAD=1 moves encode/submit/present to a thread, off by default; the original renders through dx7z.dll on its main thread.
     pub(crate) fn draw_frame(&mut self) {
+        #[cfg(target_arch = "wasm32")]
+        if crate::web::loading() {
+            if let Some(window) = &self.window { window.request_redraw(); }
+            return;
+        }
         // the encode / submit / present of each frame on a render thread of its own (`nfs-renderer`'s
         // `front.rs`), from the first live frame on: `NFS_RENDER_THREAD=1` on (default off: on a
         // 120 Hz vsync-bound machine it adds frame-time jitter and gains nothing, `RE/notes/PERF.md` PH)

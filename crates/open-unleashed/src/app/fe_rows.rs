@@ -449,6 +449,10 @@ impl App {
         let picture = (!chron.is_empty() || !chron_logo.is_empty())
             .then(|| self.chronicle_picture())
             .flatten();
+        #[cfg(target_arch = "wasm32")]
+        if let Some(file) = &picture {
+            if !crate::web::prepare_frontend_files(&self.paths, "Chron", &[file.clone()]) { return; }
+        }
         let chron_pair = picture.as_deref().filter(|_| !chron_logo.is_empty()).and_then(|f| self.chronicle_logo(f));
         let (Some(l), Some(r)) = (self.fe.layout_preview.as_mut(), self.renderer.as_mut()) else {
             return;

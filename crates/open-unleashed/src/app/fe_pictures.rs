@@ -69,6 +69,8 @@ impl App {
             .logo_car(Some("CarCompare1"), None)
             .map(|c| format!("{}.fsh", c.showcase))
             .unwrap_or_default();
+        #[cfg(target_arch = "wasm32")]
+        if !crate::web::prepare_frontend_files(&self.paths, "Showcase", &[pack.clone()]) { return; }
         let (Some(l), Some(r)) = (self.fe.layout_preview.as_mut(), self.renderer.as_mut()) else { return };
         for (index, number) in want {
             l.set_pack_picture(r, &self.paths, "Showcase", index, &pack, number.max(0) as usize);
@@ -359,6 +361,8 @@ impl App {
         let huds = l.numbered_widgets("NFS5.HUD");
         // the preview's pieces for the options as they stand (the frame hook keeps them current)
         let hud_preview = if huds.is_empty() { None } else { Some(self.hud_preview_pieces()) };
+        #[cfg(target_arch = "wasm32")]
+        if !crate::web::prepare_frontend_files(&self.paths, "Movies", &movies.iter().map(|(_, file, _)| file.clone()).collect::<Vec<_>>()) { return; }
         let (Some(l), Some(r)) = (self.fe.layout_preview.as_mut(), self.renderer.as_mut()) else { return };
         for index in pictures {
             l.set_pack_picture(r, &self.paths, "Art", index, "ALLdrivr.fsh", picture);

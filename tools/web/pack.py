@@ -2,6 +2,7 @@
 """Publish original installation files as immutable, independently fetched assets."""
 import argparse
 import fnmatch
+import gzip
 import hashlib
 import json
 from pathlib import Path
@@ -118,6 +119,19 @@ def prepare_from_installation(source: Path, output: Path, movie_exe: Path | None
         return publish(stage, output, extra_files)
 
 
+def compress_object(target: Path) -> None:
+    """Keep a deterministic HTTP gzip representation only when it saves bandwidth."""
+    data = target.read_bytes()
+    compressed = gzip.compress(data, compresslevel=6, mtime=0)
+    sidecar = target.with_name(target.name + '.gz')
+    if len(compressed) + 64 < len(data):
+        temporary = sidecar.with_name(sidecar.name + '.tmp')
+        temporary.write_bytes(compressed)
+        temporary.replace(sidecar)
+    else:
+        sidecar.unlink(missing_ok=True)
+
+
 def publish(source: Path, output: Path, extra_files=()):
     if not all((source / name).is_dir() for name in ('GameData', 'FEData')):
         raise ValueError('source must contain GameData and FEData')
@@ -194,6 +208,11 @@ def publish(source: Path, output: Path, extra_files=()):
             target.write_bytes(data)
         if hashlib.sha256(target.read_bytes()).hexdigest() != digest:
             raise ValueError(f'object integrity failure: {digest}')
+    # Include song segments and headers as well as ordinary file objects.
+    urls = {entry['url'] for entry in files.values() if 'url' in entry}
+    urls.update(f'objects/{digest}' for digest in objects)
+    for url in sorted(urls):
+        compress_object(output / url)
     manifest = {'schema': 1, 'version': version, 'files': files}
     temporary = output / 'manifest.json.tmp'
     temporary.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')

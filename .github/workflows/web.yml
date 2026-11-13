@@ -42,7 +42,7 @@ jobs:
         run: python3 -m unittest discover -s tools/web -p 'test_*.py'
 
       - name: Run browser module tests
-        run: node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs
+        run: node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs packaging/web/startup-assets.test.mjs
 
       - name: Validate deployment files
         env:

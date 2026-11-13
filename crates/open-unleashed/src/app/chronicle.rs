@@ -95,6 +95,8 @@ impl App {
             .into_iter()
             .map(|(i, number)| (i, files.get(number.max(0) as usize).cloned().unwrap_or_default()))
             .collect();
+        #[cfg(target_arch = "wasm32")]
+        if !crate::web::prepare_frontend_files(&self.paths, "Chron", &wanted.iter().map(|(_, file)| file.clone()).collect::<Vec<_>>()) { return; }
         let (Some(l), Some(r)) = (self.fe.layout_preview.as_mut(), self.renderer.as_mut()) else { return };
         for (index, file) in wanted {
             // entry 0 is the resting frame; the draw takes the next one when the pointer is on

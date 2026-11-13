@@ -2,6 +2,7 @@ import './controls.mjs';
 import { enterFullscreen, requestLaunchFullscreen } from './fullscreen.mjs';
 import { AssetSource } from './assets.mjs';
 import { VirtualFileSystem } from './vfs.mjs';
+import { carPaths, gamePaths, initialPaths } from './startup-assets.mjs';
 import { apply, detectLocale, getLocale, onLocaleChange, setLocale, t } from './i18n.mjs';
 import { applyScale, storedScale } from './render-scale.mjs';
 import { leaveGame } from './exit-game.mjs';
@@ -85,11 +86,11 @@ function waitForGame() {
     observer.observe(document.documentElement, {attributes:true, attributeFilter:['data-game-mode']});
   });
 }
-const report = (error, {track = false} = {}) => {
+const report = (error, {compact = false} = {}) => {
   const failure = error instanceof Error ? error : new Error(String(error));
   loadingFailure = failure;
   rejectReady?.(failure);
-  if (!track) {
+  if (!compact) {
     recovery ||= initialized || !!document.querySelector('canvas');
     loader.dataset.presentation = 'startup';
     loader.setAttribute('aria-labelledby', 'loading-title');
@@ -112,7 +113,7 @@ globalThis.nfsFatal = text => report(new Error(text));
 window.addEventListener('unhandledrejection', event => report(event.reason));
 window.addEventListener('error', event => report(event.error || event.message));
 let timer;
-let retryTrack;
+let retryResources;
 async function flush() {
   if (!fs?.dirty.size) return;
   say(saveStatus, message('saves.saving'));
@@ -123,9 +124,9 @@ async function flush() {
 // site's home page. The WebAssembly instance cannot be restarted, so re-entering reloads the page.
 globalThis.nfsExitGame = () => { void leaveGame(globalThis, flush); };
 async function launch({ gesture = false } = {}) {
-  if (launching && !retryTrack && !recovery) return;
+  if (launching && !retryResources && !recovery) return;
   if (recovery) { location.reload(); return; }
-  if (retryTrack) { const resume = retryTrack; retryTrack = null; resume(); return; }
+  if (retryResources) { const resume = retryResources; retryResources = null; resume(); return; }
   // Fullscreen needs this user gesture, so ask before the first await.
   if (gesture) void requestLaunchFullscreen();
   launching = true;
@@ -133,6 +134,20 @@ async function launch({ gesture = false } = {}) {
   start.disabled = true;
   showLoading('connect', 'loading.connecting');
   try {
+    // Download and compile without starting Rust: its synchronous reads need the VFS.
+    // Handle rejection immediately while resource preparation is still running.
+    const engine = Promise.all([
+      import('./pkg/open_unleashed.js'),
+      (async () => {
+        const response = await fetch(new URL('./pkg/open_unleashed_bg.wasm', import.meta.url));
+        if (!response.ok) throw new Error(`WebAssembly HTTP ${response.status}`);
+        if (WebAssembly.compileStreaming) {
+          try { return await WebAssembly.compileStreaming(response.clone()); }
+          catch { /* Hosts without the WASM MIME type need the byte-buffer path. */ }
+        }
+        return WebAssembly.compile(await response.arrayBuffer());
+      })(),
+    ]).then(value => ({value}), error => ({error}));
     if (!fs) {
       const source = await AssetSource.open(new URLSearchParams(location.search).get('data') || './data/');
       fs = new VirtualFileSystem(source);
@@ -142,27 +157,35 @@ async function launch({ gesture = false } = {}) {
     showLoading('resources', 'loading.assets');
     const tracks = Object.keys(fs.source.manifest.files).filter(path => path.startsWith('gamedata/track/'));
     const sharedTrack = path => path.endsWith('/animdefs.txt') || path.endsWith('/default.bin') || path.startsWith('gamedata/track/data/');
-    const trackPaths = name => tracks.filter(path => sharedTrack(path) || !name || path.split('/').at(-1).startsWith(name.toLowerCase()));
+    // Race setup still chooses opponents/traffic synchronously. Prepare their
+    // possible models here; showroom previews prepare only the displayed family.
+    const raceCars = carPaths(fs.source.manifest.files);
+    const trackPaths = name => [...raceCars, ...tracks.filter(path => sharedTrack(path) || !name || path.split('/').at(-1).startsWith(name.toLowerCase()))];
     globalThis.nfsTrackReady = name => trackPaths(name).every(path => fs.files.has(`game/${path}`));
-    globalThis.nfsPrepareTrack = async name => {
+    const prepareResources = async (paths, key) => {
       while (true) {
-        showLoading('resources', 'loading.track', {compact:true});
+        showLoading('resources', key, {compact:true});
         try {
-          await fs.preload(trackPaths(name), showProgress);
+          await fs.preload(paths, showProgress);
           finishLoading();
           return;
         } catch(error) {
-          report(error, {track:true});
-          await new Promise(resolve => { retryTrack = resolve; });
+          report(error, {compact:true});
+          await new Promise(resolve => { retryResources = resolve; });
         }
       }
     };
-    const initial = Object.keys(fs.source.manifest.files).filter(path => !path.startsWith('gamedata/track/') || sharedTrack(path) || path.split('/').at(-1).startsWith('alps'));
+    globalThis.nfsPrepareTrack = name => prepareResources(trackPaths(name), 'loading.track');
+    globalThis.nfsFilesReady = paths => gamePaths(paths).every(path => fs.files.has(`game/${path}`));
+    globalThis.nfsPrepareFiles = paths => prepareResources(gamePaths(paths), 'loading.assets');
+    const initial = initialPaths(fs.source.manifest.files);
     await fs.preload(initial, showProgress);
     showLoading('engine', 'loading.engine');
     if (!initialized) {
-      const { default: init } = await import('./pkg/open_unleashed.js');
-      await init();
+      const prepared = await engine;
+      if (prepared.error) throw prepared.error;
+      const [{ default: init }, module] = prepared.value;
+      await init({module_or_path: module});
       initialized = true;
       timer = setInterval(flush, 1000);
     }

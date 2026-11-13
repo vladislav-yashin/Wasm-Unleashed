@@ -152,6 +152,11 @@ impl App {
         {
             wanted.push((usize::MAX, model, variant, Vec::new(), self.paint.into(), None));
         }
+        let key: Vec<(usize, String, i16, Paint, Vec<[i16; 3]>, Option<i8>)> = wanted.iter().map(|(i, n, v, sw, p, dn)| (*i, n.clone(), *v, *p, sw.clone(), *dn)).collect();
+        #[cfg(target_arch = "wasm32")]
+        if self.fe.cars_key != key || self.fe.cars.len() != key.len() {
+            if !crate::web::prepare_car_models(&self.paths, &wanted.iter().map(|(_, model, ..)| model.clone()).collect::<Vec<_>>()) { return; }
+        }
         if self
             .fe.room
             .iter()
@@ -190,7 +195,6 @@ impl App {
         // file for twelve cars and twelve styles, `964` one for eight. Keyed on the file alone,
         // stepping through a family never reloaded, so the showroom kept the first car's body
         // and paint while the name under it changed. Found in play, 2026-09-21.
-        let key: Vec<(usize, String, i16, Paint, Vec<[i16; 3]>, Option<i8>)> = wanted.iter().map(|(i, n, v, sw, p, dn)| (*i, n.clone(), *v, *p, sw.clone(), *dn)).collect();
         // `RCar::load` in the front end (`[0x65B928]` set) hands the specular layer `FEDU` / `FE  ` /
         // `FESH` (0x441AF1…0x441B3E → 0x440940); the `CarExtEnv` passes are built as in a race by
         // `Graphics.CarChrome` (0x44F020 → `[0x6197F8]`, `lighting.md` §5.3). The front end's
@@ -604,6 +608,10 @@ impl App {
         if room.id != "ID_VICTORY" {
             self.fe.victory_movie = None;
         } else if !self.fe.room.is_empty() {
+            #[cfg(target_arch = "wasm32")]
+            if self.fe.victory_movie.is_none() {
+                if !crate::web::prepare_frontend_files(&self.paths, "Movies", &[nfs_game::room::VICTORY_MOVIE.to_string()]) { return; }
+            }
             let now = self.fe.ms;
             if self.fe.victory_movie.is_none()
                 && let Some(path) = nfs_assets::GamePaths::find_file(&self.paths.fe_data().join("Movies"), nfs_game::room::VICTORY_MOVIE)

@@ -49,6 +49,13 @@ without original game resources; it is a diagnostic page, not a gameplay test.
 
 The manifest contains case-insensitive paths, sizes, groups and SHA-256 hashes.
 Content-addressed objects are independently fetched, verified and cached.
+The packer also writes deterministic `.gz` sidecars when compression saves space.
+Nginx and the local server negotiate these using `Accept-Encoding`; browsers
+transparently decompress before SHA-256 verification. Re-run asset preparation to
+add sidecars to an existing data directory and keep them alongside the objects
+when deploying. Uncompressed objects remain available for older hosts and clients.
+WebAssembly downloads and compiles alongside asset preparation after Start;
+the engine starts only once the virtual filesystem and saves are ready.
 The `--from-installation` path copies only `GameData/`, `FEData/`, `fe.txt`,
 `version.txt`, `nfs5.ini` (when present), and the derived `madtables.bin`; other
 root files such as the original executable, DLLs or `Backup/` are ignored.
@@ -56,12 +63,20 @@ root files such as the original executable, DLLs or `Backup/` are ignored.
 the executable itself is not published. Without these tables original videos
 are skipped. Original data is not included in this repository or the web build.
 
-The initial load includes front-end, cars, simulation, short sounds and the starting
-Alps track. Quick races load the selected track before changing game state;
+The initial load includes front-end tables/art, simulation, short sounds, the
+starting Alps track, the default 993 model, the two original intro movies and the
+entry screen's `ch6` movie. Other movies, Chronicle photographs and Showcase packs
+are fetched only when a visible widget needs them; only the selected file or
+thumbnail set is prepared before its synchronous decoder runs. The loader blocks
+input and pauses front-end frames until preparation succeeds, with Retry on errors.
+Showroom car previews similarly prepare only the displayed model families.
+These deferred loads work with existing manifests; asset repacking is not required.
+Quick races load the selected track before changing game state;
 series/career modes currently preload the remaining tracks before their first
 race. Shared animation and sky metadata are included in the bootstrap. Music archives are segmented: only the directory and per-song headers are loaded
 initially, and individual songs are fetched and verified when playback starts.
-Car models and short sound banks are currently part of the initial load.
+The remaining car models are prepared before the first race because opponent and
+traffic selection is still synchronous; short sound banks remain in the initial load.
 Loaded resources remain in memory until page reload; explicit unload is exposed
 by the VFS but not yet integrated with game-state ownership.
 
@@ -119,7 +134,7 @@ the shell does not retranslate them.
 cargo +stable check -p open-unleashed --target wasm32-unknown-unknown --locked
 cargo +stable test -p nfs-formats -p nfs-net --lib
 python3 -m unittest discover -s tools/web -p 'test_*.py'
-node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs packaging/web/exit-game.test.mjs
+node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs packaging/web/exit-game.test.mjs packaging/web/startup-assets.test.mjs
 ```
 
 For Firefox frame-pacing investigations, pass `--profile-webgl` to
