@@ -1,6 +1,9 @@
+import './controls.mjs';
+import { enterFullscreen, requestLaunchFullscreen } from './fullscreen.mjs';
 import { AssetSource } from './assets.mjs';
 import { VirtualFileSystem } from './vfs.mjs';
 import { apply, detectLocale, getLocale, onLocaleChange, setLocale, t } from './i18n.mjs';
+import { applyScale, storedScale } from './render-scale.mjs';
 const status = document.querySelector('#status');
 const loader = document.querySelector('#loader');
 const start = document.querySelector('#start');
@@ -11,6 +14,14 @@ apply();
 const language = document.querySelector('#language');
 language.value = getLocale();
 language.onchange = () => { setLocale(language.value); };
+// The render scale is the shell's own setting: the game reads it when it sizes its surface, so it
+// applies from the next frame on, before or after Start.
+const renderScale = document.querySelector('#render-scale');
+if (renderScale) {
+  renderScale.value = String(storedScale());
+  applyScale(renderScale.value);
+  renderScale.onchange = () => { applyScale(renderScale.value); };
+}
 // Texts that depend on runtime state: re-render them when the locale changes.
 const dynamic = new Map();
 const say = (node, render) => { dynamic.set(node, render); node.textContent = render(); };
@@ -38,6 +49,8 @@ async function flush() {
 start.addEventListener('click', async () => {
   if (recovery) { location.reload(); return; }
   if (retryTrack) { const resume = retryTrack; retryTrack = null; resume(); return; }
+  // Fullscreen needs this user gesture, so ask before the first await.
+  void requestLaunchFullscreen();
   start.disabled = true;
   try {
     if (!fs) {
@@ -84,7 +97,7 @@ start.addEventListener('click', async () => {
 document.querySelector('#fullscreen').onclick = async () => {
   try {
     if (document.fullscreenElement) await document.exitFullscreen();
-    else await document.documentElement.requestFullscreen();
+    else await enterFullscreen();
     document.querySelector('canvas')?.focus();
   } catch { /* optional on mobile Safari */ }
 };
@@ -103,34 +116,11 @@ document.querySelector('#import').onchange = async event => {
 };
 document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
 window.addEventListener('pagehide', flush);
-const held = new Map();
-function key(code, down) {
-  const canvas = document.querySelector('canvas');
-  if (!canvas) return;
-  canvas.focus();
-  canvas.dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', {code, key:code.startsWith('Key') ? code.slice(3).toLowerCase() : code === 'Space' ? ' ' : code, bubbles:true}));
-}
-for (const button of document.querySelectorAll('[data-code]')) {
-  button.onpointerdown = event => {
-    event.preventDefault(); button.setPointerCapture(event.pointerId);
-    held.set(event.pointerId, button.dataset.code); key(button.dataset.code, true);
-  };
-  const release = event => {
-    const code = held.get(event.pointerId); if (!code) return;
-    held.delete(event.pointerId);
-    if (![...held.values()].includes(code)) key(code, false);
-  };
-  button.onpointerup = release; button.onpointercancel = release; button.onlostpointercapture = release;
-}
-window.addEventListener('blur', () => { for (const code of held.values()) key(code,false); held.clear(); });
-// Native text fields provide the OS keyboard. Rust consumes committed text through the browser bridge.
-document.querySelector('#text-input').addEventListener('change', event => {
-  globalThis.nfsPendingText = event.target.value;
-  event.target.value = '';
-  document.querySelector('canvas')?.focus();
-});
-
 const observedCanvases = new WeakSet();
+// The canvas's backing-store size, which the render scale changes (wgpu sets `width`/`height`).
+// It is the real number of pixels the game draws, so the label is the honest readout.
+const renderSize = document.querySelector('#render-size');
+const showRenderSize = canvas => { if (renderSize && canvas.width > 1 && canvas.height > 1) renderSize.textContent = `${canvas.width}×${canvas.height}`; };
 new MutationObserver(() => {
   const canvas = document.querySelector('canvas');
   if (!canvas || observedCanvases.has(canvas)) return;
@@ -138,4 +128,6 @@ new MutationObserver(() => {
   canvas.addEventListener('webglcontextlost', event => {
     event.preventDefault(); flush(); report(new Error(t('error.contextLost')));
   });
+  new MutationObserver(() => showRenderSize(canvas)).observe(canvas, {attributes:true, attributeFilter:['width', 'height']});
+  showRenderSize(canvas);
 }).observe(document.body, {childList:true});

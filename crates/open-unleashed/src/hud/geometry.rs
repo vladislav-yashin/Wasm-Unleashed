@@ -2,6 +2,9 @@
 
 use crate::*;
 
+#[cfg(target_arch = "wasm32")]
+thread_local! { static TOUCH_BOTTOM: std::cell::Cell<f32> = const { std::cell::Cell::new(0.0) }; }
+
 impl Hud {
     /// `night` picks the `*N.fsh` faces and needles the original switches to when the night flag
     /// `word[0x628A28]` is set (`RE/notes/hud.md` §3.2).
@@ -369,6 +372,8 @@ impl Hud {
     /// physical framebuffer).
     pub(crate) fn set_screen(w: u32, h: u32) {
         HUD_PX.with(|c| c.set((w.max(1), h.max(1))));
+        #[cfg(target_arch = "wasm32")]
+        TOUCH_BOTTOM.with(|c| c.set(crate::web::touch_bottom() * h as f32));
     }
 
     /// Where the 640 × 480 design screen's top-left corner lies on the render target:
@@ -463,7 +468,7 @@ impl Hud {
         if let Some((fx, fy)) = HUD_STORED.with(|t| t.borrow().iter().find(|e| e.0 == x && e.1 == y && e.2 == w).map(|e| e.3)) {
             let (px, py) = ((fx as f64 * sw as f64) as i32, (fy as f64 * sh as f64) as i32);
             let (ox, oy) = Self::origin();
-            return (px as f32 - ox, py as f32 - oy);
+            return Self::touch_anchor((px as f32 - ox, py as f32 - oy), y);
         }
         let (wi, hi) = (w as i32, h as i32);
         let (mut ax, mut ay) = Self::anchor_rule(sw, sh, x as i32, y as i32, wi, hi);
@@ -476,7 +481,20 @@ impl Hud {
         }
         let (px, py) = ((fx as f64 * sw as f64) as i32, (fy as f64 * sh as f64) as i32);
         let (ox, oy) = Self::origin();
-        (px as f32 - ox, py as f32 - oy)
+        Self::touch_anchor((px as f32 - ox, py as f32 - oy), y)
+    }
+
+    // Browser controls reserve a strip below edge-anchored instruments. This is
+    // presentation only: original HUD records and saved positions stay untouched.
+    fn touch_anchor((x, y): (f32, f32), design_y: f32) -> (f32, f32) {
+        #[cfg(target_arch = "wasm32")]
+        if design_y >= 240.0 {
+            let (_, oy) = Self::origin();
+            let inset = TOUCH_BOTTOM.with(|c| c.get());
+            return (x, y - inset.min((y + oy - 4.0).max(0.0)));
+        }
+        let _ = design_y;
+        (x, y)
     }
 
     /// The stored positions of the record in use ([`HudCfg::stored_positions`] order), keyed by the

@@ -1,3 +1,42 @@
-:root{color-scheme:dark;font:16px system-ui;background:#090c12;color:#eee}body{margin:0;overflow:hidden}button,.button{font:inherit;background:#202a39;color:inherit;border:1px solid #68778b;border-radius:6px;padding:.65rem;cursor:pointer}button:active{background:#56718e}#loader{position:fixed;z-index:20;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;background:#090c12}#loader[hidden]{display:none}#status{max-width:85vw;overflow-wrap:anywhere}progress{width:min(80vw,32rem)}canvas#game{position:fixed;inset:0;width:100vw!important;height:100dvh!important;outline:none;touch-action:none}#tools{position:fixed;z-index:10;top:env(safe-area-inset-top,0);right:env(safe-area-inset-right,0);display:flex;align-items:center;gap:.3rem;opacity:.65}#tools:hover{opacity:1}#tools button,.button{font-size:.7rem}input[type=file]{display:none}#tools select{font:inherit;font-size:.7rem;max-width:6.5rem;background:#202a39;color:inherit;border:1px solid #68778b;border-radius:6px;padding:.25rem;cursor:pointer}#touch{display:none;position:fixed;z-index:10;bottom:max(.5rem,env(safe-area-inset-bottom));left:max(.5rem,env(safe-area-inset-left));right:max(.5rem,env(safe-area-inset-right));justify-content:space-between;gap:.4rem;pointer-events:none}#touch div{display:flex;align-items:end;gap:.3rem}#touch button{pointer-events:auto;touch-action:none;user-select:none;min-height:3rem;opacity:.65;font-size:.75rem}#text-input{position:fixed;z-index:10;left:.5rem;top:max(.5rem,env(safe-area-inset-top));width:8rem;padding:.4rem;opacity:.6} @media(pointer:coarse){#touch{display:flex}#tools{max-width:70vw;flex-wrap:wrap;justify-content:end}}@media(max-height:450px){#touch button{padding:.4rem;min-height:2.5rem}}
-
-html[data-game-mode="race"] #text-input{display:none}
+:root{color-scheme:dark;font:16px system-ui;background:#090c12;color:#eee}body{margin:0;overflow:hidden}button,.button{font:inherit;background:#202a39;color:inherit;border:1px solid #68778b;border-radius:6px;padding:.65rem;cursor:pointer}button:active{background:#56718e}#loader{position:fixed;z-index:20;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;background:#090c12}#loader[hidden]{display:none}#status{max-width:85vw;overflow-wrap:anywhere}progress{width:min(80vw,32rem)}canvas#game{position:fixed;inset:0;width:100vw!important;height:100dvh!important;outline:none;touch-action:none}#tools{position:fixed;z-index:10;top:env(safe-area-inset-top,0);right:env(safe-area-inset-right,0);display:flex;align-items:center;gap:.3rem;opacity:.65}#tools:hover{opacity:1}#tools button,.button{font-size:.7rem}input[type=file]{display:none}#tools select{font:inherit;font-size:.7rem;line-height:normal;max-width:6.5rem;background:#202a39;color:inherit;border:1px solid #68778b;border-radius:6px;padding:.65rem .25rem;cursor:pointer}
+#tools-toggle{display:none;position:fixed;z-index:12;top:max(4px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:44px;height:40px;padding:0;opacity:.65}
+#touch{display:none;position:fixed;inset:0;z-index:10;pointer-events:none;--edge:max(12px,env(safe-area-inset-left));--bottom:max(12px,env(safe-area-inset-bottom));--control:clamp(52px,min(16dvh,17vw),88px)}
+#touch>div{position:absolute;display:flex;gap:8px;align-items:center;bottom:var(--bottom)}
+#touch button{display:grid;place-items:center;box-sizing:border-box;line-height:1;pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;min-width:48px;min-height:44px;opacity:.65;font-size:12px;background:#17233499;border:1px solid #c5d8ec88}
+#touch button svg{display:block;width:16px;height:16px;fill:currentColor;pointer-events:none}
+#touch .steering button{padding:0}
+#touch .steering button svg{width:28px;height:28px}
+#touch button.held{opacity:1;background:#647f9acc;border-color:#fff}
+#touch .steering{left:var(--edge);gap:6px}
+#touch .steering button{width:var(--control);height:var(--control);font-size:28px;border-radius:20px}
+#touch .pedals{right:max(12px,env(safe-area-inset-right))}
+#touch .pedals button{width:var(--control);height:var(--control);border-radius:20px;padding:4px;overflow-wrap:anywhere}
+#touch .pedals button[data-code="Space"]{height:48px;width:clamp(52px,11dvh,68px);align-self:flex-start}
+#touch .race-actions{left:50%;transform:translateX(-50%);bottom:var(--bottom);gap:5px}
+#touch .race-actions button{padding:5px;min-width:40px}
+#touch .menu-arrows{left:var(--edge);bottom:calc(var(--bottom) + 6px);display:grid;grid-template-columns:repeat(3,48px);gap:4px}
+.menu-arrows button:first-child{grid-column:2}.menu-arrows button:nth-child(2){grid-column:1;grid-row:2}.menu-arrows button:nth-child(3){grid-column:2;grid-row:2}.menu-arrows button:nth-child(4){grid-column:3;grid-row:2}
+#touch .menu-actions{right:max(12px,env(safe-area-inset-right));flex-direction:column;gap:6px}
+#touch .menu-actions button{min-width:68px}
+#touch .race-controls{display:none}
+:root[data-controls-mode="race"] #touch .race-controls{display:flex}
+:root[data-controls-mode="race"] #touch .menu-controls{display:none}
+:root:not([data-game-mode="menu"]):not([data-game-mode="race"]) #touch{display:none}
+#text-input{position:fixed;z-index:11;box-sizing:border-box;margin:0;padding:0;border:0;opacity:.01;background:transparent;color:transparent;caret-color:transparent;font-size:16px;touch-action:manipulation}
+#text-input[hidden]{display:none}
+@media(any-pointer:coarse){
+ #touch{display:block}#tools-toggle{display:block}
+ #tools{display:none;top:max(4px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right));max-width:min(360px,calc(50vw - 38px));padding:8px;opacity:1;flex-wrap:wrap;justify-content:end;text-shadow:0 1px 2px #000}
+ :root[data-tools-open="true"] #tools{display:flex}
+}
+/* Desktop: a race fills every HUD corner, so the toolbar folds into a ☰ on the bottom centre strip,
+   the one place the HUD leaves free (the touch layout uses it for its race buttons too). The panel
+   opens upwards above the button; the menu keeps the toolbar open in the top right. */
+@media not all and (any-pointer:coarse){
+ :root[data-game-mode="race"] #tools{display:none}
+ :root[data-game-mode="race"] #tools-toggle{display:block;top:auto;bottom:max(6px,env(safe-area-inset-bottom));left:0;right:0;margin-inline:auto;transform:none;width:44px;height:36px;padding:0;opacity:.5}
+ :root[data-game-mode="race"] #tools-toggle:hover{opacity:1}
+ :root[data-game-mode="race"][data-tools-open="true"] #tools{display:flex;top:auto;bottom:calc(max(6px,env(safe-area-inset-bottom)) + 42px);left:0;right:0;margin-inline:auto;width:max-content;max-width:min(34rem,calc(100vw - 1rem));padding:8px;flex-wrap:wrap;justify-content:center;opacity:1;background:#0b111ad9;border:1px solid #68778b;border-radius:8px;text-shadow:0 1px 2px #000}
+}
+@media(max-width:740px){#touch .race-actions{bottom:calc(var(--bottom) + var(--control) + 8px)}}
+#render-size{font-size:.7rem;opacity:.75;font-variant-numeric:tabular-nums;min-width:4.5rem;text-align:right}

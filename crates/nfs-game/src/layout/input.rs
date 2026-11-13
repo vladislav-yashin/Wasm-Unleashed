@@ -122,6 +122,19 @@ impl LayoutScreen {
         })
     }
 
+    /// Native browser text input uses the same geometry, buffer and length limit.
+    pub fn browser_input(&self, index: usize) -> Option<(String, String, [f32; 4], usize)> {
+        if let Some((k, j)) = self.route(index) {
+            return self.groups.get(&k)?.browser_input(j);
+        }
+        let e = self.layout.elements.get(index)?;
+        if self.is_hidden(index) || self.widget_disabled(index) { return None; }
+        let accessor = e.get("accessor")?.to_owned();
+        let (x, y) = self.position_of(e);
+        let (w, h) = self.box_of(e, 0);
+        Some((accessor.clone(), self.edits.get(&index).cloned().unwrap_or_default(), [x, y, w, h], Self::input_max_len(&accessor).unwrap_or(0)))
+    }
+
     /// One typed character, filtered exactly as the shared key handler **0x4CCC20** filters it:
     ///
     /// ```text

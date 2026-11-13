@@ -968,6 +968,10 @@ pub(crate) struct FrontEnd {
     /// PORT-DEVIATION D11 (PORT-DEVIATIONS.md) [0x4BC710, 0x44E720, 0x44E780] of "the modes this machine can actually run in" rather than the original's
     /// own device-mode list, which this port cannot reproduce.
     pub(crate) resolution_sel: usize,
+    /// The row a loaded profile's `Graphics.Resolutions` accessor carried, until there is a window
+    /// to clamp it against this machine's mode list — a `--fe` / `--career` / `--mission` launch
+    /// applies the profile before the window exists (see [`App::apply_saved_resolution`]).
+    pub(crate) resolution_pending: Option<u32>,
     /// `OwnedCars.Car`'s list as [`App::fe_owned_select`] last saw it
     pub(crate) owned_seen: Option<Vec<usize>>,
     /// The list vector's buffer as 0x501AD0 leaves it: refilled in place, the slots past the new

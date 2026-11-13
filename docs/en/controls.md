@@ -26,7 +26,7 @@ the bar is up (never while driving): d-pad / left stick picks, A answers, B goes
 
 ## Browser and touch
 
-The game runs in the browser canvas. The fullscreen button in the top-right corner enters browser
+The game runs in the browser canvas. The fullscreen button in the browser toolbar enters browser
 fullscreen; click the canvas first if the keyboard does not respond. Gamepads are read through the browser's
 Gamepad API and work after the first button press or stick movement; wheel force feedback is unavailable in
 the browser.
@@ -34,6 +34,16 @@ the browser.
 On touch devices an on-screen panel provides the essential controls: left / right steering, throttle, brake,
 handbrake, pause, camera and gear up / down. The panel is shown for coarse pointers and can be used together
 with a connected gamepad.
+
+On touch devices, large steering and pedal buttons support sliding between buttons
+without lifting the finger. Lower HUD instruments move above these buttons.
+Menus use a D-pad, OK and Back; tapping the game itself still works. The ☰ button
+opens the save, language and fullscreen toolbar. Tap an active in-game text field
+to open the OS keyboard. Original character and length restrictions still apply.
+
+With a mouse the toolbar stays open in the top right corner in menus. During a race the
+game HUD fills every corner, so the toolbar folds into a ☰ at the bottom centre, in the
+strip the dials and the track map leave free; its panel opens upwards above the button.
 
 ## Driving
 

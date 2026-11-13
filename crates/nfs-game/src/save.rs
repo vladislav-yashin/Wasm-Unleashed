@@ -712,6 +712,11 @@ pub struct SavedSettings {
     pub audio_quality: u8,
     /// `Graphics.ViewDistance` as the original's index into {0.5, 0.67, 0.83, 1.0}
     pub view_distance: u8,
+    /// `Graphics.Resolutions`' selection — the row of the enumerated mode list (`0x4BC710`), the
+    /// original's `FEScreenResolutionAccessor`. Its Save 0x4BC723 writes the selection **alone**
+    /// (`+0x34 = 1`, [`nfs_formats::sav::char_vect_owns_list`]), not the mode strings, so the
+    /// payload is `u32 selection` — 0 until the Graphics screen picks a mode.
+    pub resolution: u32,
     /// `Track1.Laps` / `Game.NumOpponents` / `Track1.Traffic`
     pub laps: u32,
     pub opponents: u32,
@@ -789,6 +794,8 @@ impl Default for SavedSettings {
             // (the server's fresh `XXDefXX` / `0TEST` carry 0)
             audio_quality: 0,
             view_distance: 3,
+            // a list accessor starts on row 0 (0x4BC1F0 writes `[this+0x18] = 0`)
+            resolution: 0,
             laps: 2,
             opponents: 4,
             traffic: 0,
@@ -866,6 +873,8 @@ pub fn career_to_sav_with(c: &Career, tables: &CareerTables, profile: &Profile, 
         ("Audio.AmbientLevel".into(), AccessorValue::Dword(settings.ambient as u32)),
         ("Audio.Quality".into(), AccessorValue::Dword(settings.audio_quality as u32)),
         ("Graphics.ViewDistance".into(), AccessorValue::Dword(settings.view_distance as u32)),
+        // `FEScreenResolutionAccessor`'s Save 0x4BC723: the selection alone (no list, `+0x34 = 1`)
+        ("Graphics.Resolutions".into(), AccessorValue::CharVect { items: None, selection: settings.resolution }),
         // each the accessor's index, not the port's count (history: `game-history.md` §18.5)
         ("Track1.Laps".into(), AccessorValue::Dword(laps_to_index(settings.laps))),
         ("Game.NumOpponents".into(), AccessorValue::Dword(settings.opponents)),
@@ -1175,6 +1184,9 @@ pub fn side_from_sav(s: &SaveFile) -> SaveSide {
             }
             // 0x4B8E00 with `+0x34 == 0`: the strings and the selection as saved
             (_, AccessorValue::CharVect { items: Some(items), selection }) if name == "Comms.IPList" => st.ip_list = Some((items.clone(), *selection)),
+            // `FEScreenResolutionAccessor`'s Load: the selection only (`+0x34 = 1`), clamped into
+            // the mode list by the caller — the list is this machine's, not the file's
+            (_, AccessorValue::CharVect { selection, .. }) if name == "Graphics.Resolutions" => st.resolution = *selection,
             // 0x4F56F0: the selection through 0x4BC480, then seven cars through 0x4EE6A0
             (_, AccessorValue::OpponentCars { selection, cars }) => opponent_cars = Some((*selection, cars.clone())),
             // 0x4F5B70: the index as saved; the clamp into the garage is the caller's (0x4BC240
@@ -1293,6 +1305,20 @@ mod tests {
         };
         let back = side_from_sav(&SaveFile::parse(&s.write()).unwrap());
         assert_eq!(back.settings.ip_list, Some((vec!["10.0.0.7".to_string(), "192.168.0.5:1200".to_string()], 1)));
+    }
+
+    /// `Graphics.Resolutions` rides in the accessor block as its **selection alone** (0x4BC723,
+    /// `+0x34 = 1` — no mode strings) and comes back through `side_from_sav`.
+    #[test]
+    fn the_screen_resolution_selection_round_trips() {
+        let tables = CareerTables { raw: Default::default(), tracks: vec![], tournaments: vec![], parts: vec![], personalities: vec![], missions: vec![], strings: Default::default(), catalog: vec![], package_count: 0 };
+        let mut side = SaveSide::default();
+        side.settings.resolution = 3;
+        let sav = career_to_sav_with(&Career::default(), &tables, &Profile::new("Hans", 3), &side);
+        let back = SaveFile::parse(&sav.write()).unwrap();
+        let entry = back.accessors.as_ref().unwrap().entries.iter().find(|(n, _)| n == "Graphics.Resolutions").map(|(_, v)| v.clone());
+        assert_eq!(entry, Some(AccessorValue::CharVect { items: None, selection: 3 }), "the selection alone, no list");
+        assert_eq!(side_from_sav(&back).settings.resolution, 3);
     }
 
     #[test]

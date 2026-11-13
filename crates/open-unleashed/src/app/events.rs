@@ -263,18 +263,63 @@ impl App {
 impl ApplicationHandler for App {
     #[cfg(target_arch = "wasm32")]
     fn new_events(&mut self, event_loop: &ActiveEventLoop, _: winit::event::StartCause) {
-        crate::web::report_state(if self.intro.is_some() { "intro" } else if self.window.is_none() { "boot" } else if self.vehicle.is_some() { "race" } else { "menu" }, self.paused, self.vehicle.as_ref().map_or(0.0, |v| v.speed()));
+        crate::web::report_state(if self.intro.is_some() { "intro" } else if self.window.is_none() { "boot" } else if self.vehicle.is_some() { "race" } else { "menu" }, self.paused, self.vehicle.as_ref().map_or(0.0, |v| v.speed()), self.vehicle.is_some() && !self.hud_dialog_up());
         if let Some(window) = &self.window { crate::web::resize(window); }
         else if let Some(intro) = &self.intro { crate::web::resize(&intro.window); }
+        // The render scale can change while the page is open (the shell's select), and winit's
+        // `Resized` only follows the canvas's CSS box: bring the surface and the mode cells to the
+        // scaled size here, once, when the choice moved.
+        if let Some(size) = self.window.as_ref().map(|w| crate::web::surface_size(w.inner_size())) {
+            if self.renderer.as_ref().is_some_and(|r| r.size() != (size.width, size.height)) {
+                if let Some(r) = self.renderer.as_mut() {
+                    r.resize(size.width, size.height);
+                }
+                nfs_game::camera::set_mode(size.width, size.height);
+            }
+        } else if let Some(intro) = self.intro.as_mut() {
+            // the start-up movies own their window and renderer (`session.rs`'s intro branch)
+            let size = crate::web::surface_size(intro.window.inner_size());
+            if intro.renderer.size() != (size.width, size.height) {
+                intro.renderer.resize(size.width, size.height);
+            }
+        }
         if crate::web::take_race_retry() { self.start_from_layout(event_loop); if let Some(window) = &self.window { window.request_redraw(); } }
-        if let Some(text) = crate::web::take_text() {
+        let mut field_id = String::new();
+        let mut field = None;
+        if self.intro.is_none() && (self.vehicle.is_none() || self.paused) {
+            if let Some((dialog, _)) = self.fe.dialog.as_ref() {
+                if let Some(input) = dialog.field.as_ref() {
+                    if let Some(layout) = self.fe.layout_preview.as_ref() {
+                        let th = layout.dialog_text_height(&dialog.text);
+                        let (x, y, _, _, dth) = dialog.frame(th);
+                        field_id = format!("dialog:{}", dialog.text);
+                        field = Some(([x + 10.0, y + dth - 2.0, 300.0, 20.0], input.text.clone(), input.max, input.digits));
+                    }
+                }
+            } else if let Some(layout) = self.fe.layout_preview.as_ref() {
+                if let Some(index) = layout.focused_input() {
+                    if let Some((accessor, text, rect, max)) = layout.browser_input(index) {
+                        field_id = format!("{}:{index}:{accessor}", self.fe.layout_name.as_deref().unwrap_or_default());
+                        field = Some((rect, text, max, false));
+                    }
+                }
+            }
+        }
+        if let Some((rect, text, max, digits)) = field {
+            let aspect = self.window.as_ref().map_or(4.0 / 3.0, |w| { let s = w.inner_size(); s.width as f32 / s.height.max(1) as f32 });
+            let fw = (4.0 / 3.0 / aspect).min(1.0);
+            crate::web::text_field(&field_id, [(1.0 - fw) * 0.5 + rect[0] / 640.0 * fw, rect[1] / 480.0, rect[2] / 640.0 * fw, rect[3] / 480.0], &text, max, digits);
+        } else { crate::web::text_field("", [0.0; 4], "", 0, false); }
+        if let Some((_, text, commit)) = crate::web::take_text().filter(|(id, _, _)| id == &field_id && !id.is_empty()) {
             if let Some((dialog, _)) = self.fe.dialog.as_mut() {
                 if let Some(field) = dialog.field.as_mut() { field.text.clear(); }
                 text.chars().for_each(|c| { dialog.type_char(c); });
+                if commit { dialog.enter(); }
             } else if let Some(index) = self.fe.layout_preview.as_ref().and_then(|layout| layout.focused_input()) {
                 if let Some(layout) = self.fe.layout_preview.as_mut() { while layout.backspace(index) {} }
                 for c in text.chars() { self.fe_input_key(index, c); }
-                if let Some(layout) = self.fe.layout_preview.as_mut() { let _ = layout.commit_input(index); }
+                if commit { if let Some(layout) = self.fe.layout_preview.as_mut() { let _ = layout.commit_input(index); } }
+                self.bind_player_buttons();
             }
         }
         if crate::web::renderer_ready() { self.resume_inner(event_loop); }
@@ -618,6 +663,9 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::Resized(size) => {
+                // the browser's canvas may be drawn below its CSS size (`web::render_scale`)
+                #[cfg(target_arch = "wasm32")]
+                let size = crate::web::surface_size(size);
                 if let Some(r) = self.renderer.as_mut() {
                     r.resize(size.width, size.height);
                 }
@@ -630,7 +678,14 @@ impl ApplicationHandler for App {
                 // in a race the pointer is in the HUD's own pixels: the window's logical point minus the
                 // design screen's origin ([`Hud::origin`]); the front end keeps its letterboxed design space
                 let race_hud = self.hud.is_some() && self.race.is_some();
-                let scale = self.window.as_ref().map_or(1.0, |w| w.scale_factor());
+                let mut scale = self.window.as_ref().map_or(1.0, |w| w.scale_factor());
+                // the race HUD is drawn in the canvas's own pixels, which the browser's render
+                // scale shrinks with the surface (`web::render_scale`); the front end's design
+                // space is a fraction of the window and needs no correction
+                #[cfg(target_arch = "wasm32")]
+                if race_hud {
+                    scale /= crate::web::render_scale();
+                }
                 self.fe.cursor = if race_hud {
                     let (ox, oy) = Hud::origin();
                     Some(((position.x / scale) as f32 - ox, (position.y / scale) as f32 - oy))

@@ -80,6 +80,8 @@ impl App {
             // screen shows — *(until 2026-09-26 the port wrote the index of its own draw-distance
             // factor `detail`, which no screen sets)*
             view_distance: self.choice_index(choice::GRAPHICS_VIEW_DISTANCE).map_or(0, |(i, _)| i as u8),
+            // `Graphics.Resolutions`' row (`FEScreenResolutionAccessor`), the index the pick left
+            resolution: self.fe.resolution_sel as u32,
             laps: self.fe.menu.as_ref().map(|m| m.laps).unwrap_or(self.num_laps),
             opponents: self
                 .fe.menu
@@ -161,6 +163,11 @@ impl App {
             let sel = clamp_index(sel, items.len() as u32);
             netplay::set_comms_ip_list(items, sel);
         }
+        // `Graphics.Resolutions`' selection (`FEScreenResolutionAccessor`, written by 0x4BC723):
+        // resolved against this machine's mode list — right away when a window exists, else when
+        // `resume_inner` makes one (`apply_saved_profile` runs before it on `--fe` / `--career`)
+        self.fe.resolution_pending = Some(side.settings.resolution);
+        self.apply_saved_resolution();
         let mut display_seed: Vec<(usize, usize)> = Vec::new();
         for (name, d) in &side.settings.options {
             let name = name.as_str();

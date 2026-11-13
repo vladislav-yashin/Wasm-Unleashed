@@ -22,3 +22,5 @@ __pycache__/
 # Browser distribution and private original game resources
 /dist/
 /web-data/
+
+/tmp/

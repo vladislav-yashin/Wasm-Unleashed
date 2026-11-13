@@ -52,7 +52,7 @@ impl App {
         // Reconcile the surface before the first intro/menu frame uses it.
         #[cfg(target_arch = "wasm32")]
         {
-            let size = window.inner_size();
+            let size = crate::web::surface_size(window.inner_size());
             renderer.resize(size.width, size.height);
             // Every intro/menu/race frame already requests its next redraw. Browser
             // redraws use requestAnimationFrame; a parallel Poll loop only adds tasks
@@ -176,6 +176,8 @@ impl App {
             nfs_game::camera::set_mode(w, h);
             self.renderer = Some(renderer);
             self.window = Some(window);
+            // a profile applied before the window existed keeps its `Graphics.Resolutions` row
+            self.apply_saved_resolution();
             self.last_frame = Instant::now();
             self.fps_timer = Instant::now();
             // `--layout serverlist` and friends start straight on a network screen, which needs a

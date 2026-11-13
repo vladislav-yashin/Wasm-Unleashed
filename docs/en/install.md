@@ -8,16 +8,20 @@
   hosts the build; nothing of the original game is included in the project.
 - A current desktop or mobile browser with WebAssembly, WebGL2 or WebGPU, IndexedDB and Web Audio. WebGPU is
   used when the browser provides it; otherwise the renderer falls back to WebGL2.
-- A secure context: HTTPS for a remote site, or `localhost` / `127.0.0.1` for local development. If the game
-  assets come from another origin, that server must send CORS headers.
+- Use HTTPS for hosted sites. For a phone on the same LAN, run
+  `python3 tools/web/serve.py --host 0.0.0.0` and open `http://<computer-LAN-IP>:8080`.
+  Plain HTTP uses WebGL2 and fallback SHA-256 verification; WebGPU, gamepads and the persistent
+  asset cache require HTTPS or localhost. If game assets come from another origin, that server
+  must send CORS headers.
 
 ## Opening the game
 
 1. Open the hosted build, or start your own server (see [building](building.md)).
 2. Press **Start**. The page downloads the game resources and shows the progress.
 3. Wait for the loader to finish. The intro movies and the original front end start as in the original game.
-4. Use the fullscreen button in the top-right corner to enter browser fullscreen. The game canvas takes the
-   whole page.
+4. On touch devices the first **Start** tap enters browser fullscreen and asks for landscape
+   orientation. The fullscreen button in the top-right corner toggles the mode. The game canvas
+   takes the whole page.
 5. The language selector in the toolbar switches the browser shell and remembers your choice; the shell
    follows the browser's language until then. The game's own text still comes from the installed data.
 

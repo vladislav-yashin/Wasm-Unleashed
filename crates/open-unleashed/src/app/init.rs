@@ -130,6 +130,7 @@ impl App {
                 controllers_sel: 0,
                 pads_sel: 0,
                 resolution_sel: 0,
+                resolution_pending: None,
                 owned_seen: None,
                 owned_slots: Vec::new(),
                 resolution_race: None,

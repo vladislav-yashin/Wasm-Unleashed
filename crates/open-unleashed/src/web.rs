@@ -21,20 +21,58 @@ pub fn begin_renderer(event_loop: &ActiveEventLoop) {
     if let Some(canvas) = window.canvas() { canvas.set_id("game"); }
     wasm_bindgen_futures::spawn_local(async move {
         match Renderer::new_async(window.clone()).await {
-            Ok(renderer) => READY.with(|r| *r.borrow_mut() = Some((window, renderer))),
+            Ok(mut renderer) => {
+                // the shell's render scale (`#render-scale`), applied to the first surface too
+                let size = surface_size(window.inner_size());
+                renderer.resize(size.width, size.height);
+                READY.with(|r| *r.borrow_mut() = Some((window, renderer)));
+            }
             Err(error) => nfsFatal(&format!("Graphics initialization failed: {error:#}")),
         }
     });
 }
 
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function nfsRenderScale(){const s=Number(globalThis.nfsRenderScale);return s>=0.25&&s<=1?s:1}")]
+extern "C" {
+    fn nfsRenderScale() -> f64;
+}
+/// The browser shell's **render scale** (`#render-scale`, remembered in `localStorage`): the
+/// fraction of the canvas's pixels the game draws at. The canvas is still stretched over the whole
+/// viewport by CSS (`style.css`), so a smaller surface is simply upscaled by the browser — a
+/// platform performance setting, not a game rule. The game's own `Graphics.Resolutions` pick is the
+/// window's size (and does nothing in a browser, where the canvas fills the viewport).
+pub fn render_scale() -> f64 { nfsRenderScale().clamp(0.25, 1.0) }
+
+/// The canvas-backing size for a window size, after [`render_scale`].
+pub fn surface_size(size: winit::dpi::PhysicalSize<u32>) -> winit::dpi::PhysicalSize<u32> {
+    let s = render_scale();
+    if s >= 1.0 { return size; }
+    winit::dpi::PhysicalSize::new(((size.width as f64 * s) as u32).max(1), ((size.height as f64 * s) as u32).max(1))
+}
+
 thread_local! { static RACE_RETRY: Cell<bool> = const { Cell::new(false) }; static LOADING: Cell<bool> = const { Cell::new(false) }; }
-#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function nfsTrackReady(name){return globalThis.nfsTrackReady(name)} export function nfsPrepareTrack(name){return globalThis.nfsPrepareTrack(name)} export function nfsTakeText(){let text=typeof globalThis.nfsPendingText==='string'?globalThis.nfsPendingText:null;delete globalThis.nfsPendingText;return text}")]
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function nfsTrackReady(name){return globalThis.nfsTrackReady(name)} export function nfsPrepareTrack(name){return globalThis.nfsPrepareTrack(name)} export function nfsTakeText(){const pending=globalThis.nfsPendingText;delete globalThis.nfsPendingText;return pending || null}")]
 extern "C" {
     fn nfsTrackReady(name: &str) -> bool;
     fn nfsPrepareTrack(name: &str) -> js_sys::Promise;
     fn nfsTakeText() -> wasm_bindgen::JsValue;
 }
-pub fn take_text() -> Option<String> { nfsTakeText().as_string() }
+pub fn take_text() -> Option<(String, String, bool)> {
+    let value = nfsTakeText();
+    let get = |name: &str| js_sys::Reflect::get(&value, &name.into()).ok();
+    Some((get("id")?.as_string()?, get("text")?.as_string()?, get("commit")?.as_bool()?))
+}
+
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function nfsTextField(id,x,y,w,h,text,max,digits){globalThis.nfsTextField?.(id,x,y,w,h,text,max,digits)} export function nfsTouchBottom(){return matchMedia('(any-pointer:coarse)').matches && document.documentElement.dataset.controlsMode==='race' ? (Math.max(0,innerHeight-(document.querySelector('.steering')?.getBoundingClientRect().top ?? innerHeight))+8)/innerHeight : 0}")]
+extern "C" {
+    fn nfsTextField(id: &str, x: f32, y: f32, w: f32, h: f32, text: &str, max: usize, digits: bool);
+    fn nfsTouchBottom() -> f32;
+}
+pub fn text_field(id: &str, rect: [f32; 4], text: &str, max: usize, digits: bool) {
+    nfsTextField(id, rect[0], rect[1], rect[2], rect[3], text, max, digits);
+}
+pub fn touch_bottom() -> f32 { nfsTouchBottom() }
+
 pub fn loading() -> bool { LOADING.with(Cell::get) }
 pub fn take_race_retry() -> bool { RACE_RETRY.with(|r| r.replace(false)) }
 pub fn prepare_track(name: &str) -> bool {
@@ -104,9 +142,9 @@ fn smoke() {
     EventLoop::new().expect("smoke event loop").spawn_app(Smoke);
 }
 
-#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function nfsReportState(mode,paused,speed){document.documentElement.dataset.speed=String(speed);if(document.documentElement.dataset.gameMode!==mode)document.documentElement.dataset.gameMode=mode;document.documentElement.dataset.paused=String(paused)} export function nfsDownloadFrame(){document.querySelector('canvas').toBlob(blob=>{if(!blob){globalThis.nfsFatal?.('Photo export failed');return}const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='WasmUnleashed.png';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)})}")]
-extern "C" { fn nfsReportState(mode: &str, paused: bool, speed: f32); fn nfsDownloadFrame(); }
-pub fn report_state(mode: &str, paused: bool, speed: f32) { nfsReportState(mode, paused, speed); }
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function nfsReportState(mode,paused,speed,driving){globalThis.nfsUpdateControls?.(mode,paused,driving);document.documentElement.dataset.speed=String(speed);if(document.documentElement.dataset.gameMode!==mode)document.documentElement.dataset.gameMode=mode;document.documentElement.dataset.paused=String(paused)} export function nfsDownloadFrame(){document.querySelector('canvas').toBlob(blob=>{if(!blob){globalThis.nfsFatal?.('Photo export failed');return}const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='WasmUnleashed.png';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)})}")]
+extern "C" { fn nfsReportState(mode: &str, paused: bool, speed: f32, driving: bool); fn nfsDownloadFrame(); }
+pub fn report_state(mode: &str, paused: bool, speed: f32, driving: bool) { nfsReportState(mode, paused, speed, driving); }
 pub fn download_frame() { nfsDownloadFrame(); }
 
 #[derive(Default)]

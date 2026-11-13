@@ -534,6 +534,28 @@ impl App {
         self.fe.resolution_race = Some(((w, h), saved));
     }
 
+    /// Take the row a loaded profile's `Graphics.Resolutions` accessor carried
+    /// ([`FrontEnd::resolution_pending`]) once the mode list can be enumerated. **Row 0 is the
+    /// file's "never picked"** — it is what a list accessor's own `[this+0x18]` starts on
+    /// (0x4BC1F0) and `SetMode` keeps the current mode when the width is 0 (0x467FF5) — so only a
+    /// higher row takes the window, and only at a race's set-up ([`App::enter_race_mode`]).
+    /// [`App::apply_saved_profile`] can run before the window exists on a `--fe` / `--career` /
+    /// `--mission` launch; [`App::resume_inner`] calls this again once it does.
+    pub(crate) fn apply_saved_resolution(&mut self) {
+        let Some(row) = self.fe.resolution_pending else { return };
+        if self.window.is_none() {
+            return;
+        }
+        self.fe.resolution_pending = None;
+        let sel = (row as usize).min(self.resolution_list().len().saturating_sub(1));
+        self.fe.resolution_sel = sel;
+        if sel > 0 {
+            self.apply_resolution();
+        } else {
+            self.fe.resolution_race = None;
+        }
+    }
+
     /// `SetMode(0x657A48, 0x657A4C, 0x657A50, 2)` at a race's set-up (0x41562E, 0x4B6CB9): the
     /// window takes the picked size (a mode never picked keeps the current one — 0x467FF5 falls
     /// back to the current mode when the width is 0).
@@ -642,7 +664,9 @@ impl App {
             // «D < 32 → 2» rule of 0x44DFB0 (which maps `[0x657D88]` → `[0x619770]` for textures only,
             // called from 0x4B67BD) does not touch car detail. gdb on the Wine run saw 0x44E5F0 return 2
             // for both accessors. Hence a modern machine (T ≥ 6 MB, R ≥ 64 MB, C ≥ 302) starts with
-            // CarChrome = CarDetail = 2 («высоко»): the port's 2 / 2 is right for the 32-bit case.
+            // CarChrome = CarDetail = 2 («высоко»): the port's CarChrome 2 is right for the 32-bit
+            // case; its CarDetail is raised to the list's last row on purpose — see the match arm
+            // in `choice_index` below.
             // **Settled (NFS5DLL, 2026-10-02):** the Wine fresh profile's Graphics screen read car detail
             // «обычно» because the run-time list is `nfs5.dll`'s 0x5B6D5C (1506 / 1502 / 401 / 1504 / 1507),
             // not the file's 0x5B6D94: the constructor's 2 is that list's index 2 = 401 «обычно»; nothing
@@ -677,7 +701,14 @@ impl App {
                     // 0x5B95F4 (1500 "off", 1501 "on") and sets row **1** (slot 11 with 1) — the
                     // server's fresh profiles carry 1; the port's 0 came from 0x4BC1F0's initial 0
                     "Comms.Collision" => 1,
-                    "Graphics.SkyRendering" | "Graphics.CarChrome" | "Graphics.CarDetail" => 2,
+                    "Graphics.SkyRendering" | "Graphics.CarChrome" => 2,
+                    // PORT CHOICE (not the original's probe): on a normal machine 0x44E5F0 stores
+                    // the run-time list's row **2** (`401` "medium"), which is what a fresh original
+                    // profile reads. The port instead opens a fresh profile on the list's last row,
+                    // **4** (`1507` "very high"), so the car is drawn from the finest LOD the model
+                    // has (`car_model.rs`'s `CLASS_BIAS` / `EFFECTIVE_CLASS`). Saved profiles keep
+                    // whatever their own accessor block carries; the Graphics screen changes it.
+                    "Graphics.CarDetail" => 4,
                     _ if *key == "gear" => 1,
                     _ => 0,
                 };
