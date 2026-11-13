@@ -2,6 +2,8 @@
 
 <p align="center"><b>English</b> | <a href="README.ru.md">Русский</a></p>
 
+<p align="center"><a href="https://porsche.nfs.place"><b>▶ Play now in your browser — porsche.nfs.place</b></a></p>
+
 An unofficial, open-source browser reimplementation of the engine of **Need for Speed: Porsche Unleashed**
 (PC, 2000). It runs in modern desktop and mobile browsers from WebAssembly: no installation, no Wine, no
 emulation and no original executable. Physics, opponents and traffic, the Evolution career, Factory Driver and
@@ -17,9 +19,10 @@ original's behaviour.
 
 ## Play in the browser
 
-The engine compiles to `wasm32-unknown-unknown` and runs entirely in the browser. Open a hosted build, or
-prepare and serve your own copy: [browser build and hosting](packaging/web/README.md). Multiplayer is planned
-for a later stage and is not available in the browser build yet.
+The engine compiles to `wasm32-unknown-unknown` and runs entirely in the browser. Play the finished game on the
+project's home page: [porsche.nfs.place](https://porsche.nfs.place). To serve your own copy, see
+[browser build and hosting](packaging/web/README.md). Multiplayer is planned for a later stage and is not
+available in the browser build yet.
 
 ## Documentation
 
