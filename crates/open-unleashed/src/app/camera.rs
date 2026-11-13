@@ -194,6 +194,7 @@ impl App {
         self.camera_mode = forced.unwrap_or(0);
         self.anim_cam = if forced.is_some() { AnimCamSlot::Off } else { AnimCamSlot::Start };
         self.chase_offset = None;
+        self.chase_prev = None;
         self.slot_view = None;
         self.chase_settle = 0;
         self.look_yaw = None;
@@ -219,6 +220,8 @@ pub(crate) struct CamSlotState {
     pub(crate) anim_cam: AnimCamSlot,
     pub(crate) anim_cam_counter: u32,
     pub(crate) chase_offset: Option<(Vec3, u16)>,
+    /// Offset before the latest fixed camera update, for render interpolation only.
+    pub(crate) chase_prev: Option<(Vec3, u16)>,
     pub(crate) chase_settle: u8,
     pub(crate) slot_view: Option<u16>,
     pub(crate) slot_seen: (u32, u32),

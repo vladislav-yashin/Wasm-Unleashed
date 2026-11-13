@@ -507,6 +507,7 @@ impl App {
             player_ai: None,
             car_half_width: 0.9,
             chase_offset: None,
+            chase_prev: None,
             chase_settle: 0,
             slot_view: None,
             slot_key_enters: 0,

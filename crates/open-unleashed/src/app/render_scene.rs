@@ -879,7 +879,7 @@ impl App {
             self.fe_sound(9);
         }
         self.hud_hover = hover;
-        let (view, slot_near) = self.camera_pass(car_pos, car_rot, rear_view, false);
+        let (view, slot_near) = self.camera_pass(car_pos, car_rot, rear_view, false, alpha);
         // PORT-DEVIATION D46: the free camera draws instead of the slot's (which is kept for the next pass)
         self.photo_apply();
         // draw distance from `<track>_{forward,backwards}.key` for the camera's slice, scaled by the
@@ -1130,10 +1130,15 @@ impl App {
         self.scratch = sc;
     }
 
+    /// Blend only the presentation offset; never feed it back into the fixed-step filter.
+    fn blend_chase_offset(prev: Option<(Vec3, u16)>, current: Vec3, view: u16, alpha: f32) -> Vec3 {
+        prev.filter(|(_, v)| *v == view).map_or(current, |(p, _)| p.lerp(current, alpha))
+    }
+
     /// The camera slot's per-frame work (`RE/notes/camera*.md`): the view's update(s) since the last
     /// game tick, the car-relative eye, the mirror's eye, the beacon and the headlight frames.
     /// Returns the view id and the slot's near plane.
-    fn camera_pass(&mut self, car_pos: Vec3, car_rot: Quat, rear_view: bool, audio: bool) -> (u16, f32) {
+    fn camera_pass(&mut self, car_pos: Vec3, car_rot: Quat, rear_view: bool, audio: bool, alpha: f32) -> (u16, f32) {
         // every view is slot 0's half-angle, 37.5° by default, across (`camera::fov_y`); only a
         // trackside camera element brings its own (`+0x9C` when `+0x98` is set)
         // the TV modes take the view the last trackside camera set (`TvSlot::view`): the sweep
@@ -1188,6 +1193,9 @@ impl App {
         // SetSlotView ran this pass (a new view, or the same one entered again)
         let view_entered = self.slot_view.is_none_or(|old| old != view) || slot_entered;
         self.slot_view = Some(view);
+        if view_entered {
+            self.chase_prev = None;
+        }
         let ws = self.widescreen();
         // the dll's SetMode cells (`camera::set_mode`) for the window as it is now — the
         // default half-angle `[0x10006080]` SetSlotView stores (0x46584F) and the aspect 0x466F30 takes
@@ -1209,7 +1217,7 @@ impl App {
         // every view's update (chase / heli 0x461E80 / 0x4623D0, the roll-over 0x461590,
         // 0x4618B0, the driver's head lag 0x461A30, BlimpCam, the circle / spline / trackside cameras) runs once
         // per game tick against its own tick's car (`Sc64`, 0x463C30) — the [`CamTick`] history; the last update
-        // of the frame takes this frame's (interpolated) pose. The look-around (0x4611C0) reads no car state
+        // of the frame takes the frame pose, except chase updates, which always use tick poses. The look-around (0x4611C0) reads no car state
         // (held bits only); `AnimCam` 0x462F30 is stepped per tick above.
         // `+0xC0 & 0x08`, the aim bit — the table's 0x04 shifted up by SetSlotView: views 2…8,
         // 0x0A, 0x0B…0x0D (a trackside camera without its own matrix, below), 0x12 / 0x13 (the cop
@@ -1273,11 +1281,13 @@ impl App {
         };
         // **one slot update per game tick** (`Sc64`, 0x463C30 — every view's update, not the chase /
         // heli pair alone): update `upd` of the frame reads its own tick's car (`car+0x330`, `+0x364`,
-        // `+0x3A0`, the velocity, the slice), the last the frame's interpolated pose (glue); the slot's eye
+        // `+0x3A0`, the velocity, the slice); chase updates also read the last tick from history. The slot's eye
         // `+0x24` the update before left seeds the next one's ceiling tests. A frame between two ticks
         // (`steps == 0`) runs the body once with no step. The build 0x464F80 (pushes, clamp, aim) is not in
         // the dispatcher: it runs once per frame on the last eye, as below. (The slot matrix's forward row,
         // which the roll-over latch reads, is the build's, so `prev_fwd` is the frame's for every update.)
+        // The fixed eye seeds ceiling tests. Render samples must not change that state.
+        let mut fixed_chase_eye = None;
         let aimed0 = aimed;
         let frame_steps = steps;
         let n_upd = (frame_steps + anim_done).max(1);
@@ -1285,7 +1295,7 @@ impl App {
         for upd in anim_done..n_upd {
             let last_upd = upd + 1 == n_upd;
             let steps = frame_steps.min(1);
-            let hist = if !last_upd {
+            let hist = if !last_upd || (frame_steps > 0 && matches!(view, 2..=7)) {
                 // the ticks are consecutive: the entry is at its offset from the oldest
                 let want = cam_tick0 + 1 + u64::from(upd);
                 let first = self.cam_hist.front().map_or(want, |h| h.tick);
@@ -1293,7 +1303,7 @@ impl App {
             } else {
                 None
             };
-            let (car_pos, car_rot) = hist.map_or((frame_car_pos, frame_car_rot), |h| (h.pos, h.rot));
+            let (car_pos, car_rot) = hist.filter(|_| !last_upd).map_or((frame_car_pos, frame_car_rot), |h| (h.pos, h.rot));
             let fwd = car_rot * Vec3::Z;
             aimed = aimed0;
             // what the update reads of its tick's car: the frame's own for the last
@@ -1335,6 +1345,7 @@ impl App {
                 None
             };
             if let Some(mut a) = flip {
+                self.chase_prev = None;
                 if let Some(w) = self.world.as_ref() {
                     let old_eye = self.slot_eye.unwrap_or(car_pos + a);
                     a.y = ceiling(w, car_pos, a.y).min(ceiling(w, old_eye, a.y));
@@ -1384,6 +1395,8 @@ impl App {
                 // but for: no half-length, the offset pulled back by `min(speed·[0x5B3F6C] 0.05, 2.0)`
                 // (0x46256F…0x4625F6), the slope term halved (`[0x5B23F0]`) and clamped [0.25, 1.25] /
                 // [−0.75, 3.0], and a 6.32 minimum length in place of 4.94
+                let tick_pos = hist.map_or(self.car_pos, |h| h.pos);
+                let ceiling = |w: &nfs_game::world::TrackWorld, p: Vec3, y: f32| ceiling_at(w, p, tick_pos, y);
                 let heli = view >= 5;
                 let arg = if heli { view - 5 } else { view - 2 };
                 // the heli alone: while a replay plays (`[0x5E99F4] >= 2`, playing or run out) the rate
@@ -1441,7 +1454,9 @@ impl App {
                 // normalising (0x464E6B…0x464ED3): aimed 1.3 / 1.6 above the car's origin
                 let aim_lift = Vec3::Y * 4.0 * if heli { 0.4 } else { 0.325 };
                 off.y += lift;
-                let target = car_rot * off;
+                // Fixed updates must read the tick pose, independent of render frequency.
+                let tick_rot = hist.map_or(self.car_rot, |h| h.rot);
+                let target = tick_rot * off;
                 // both branches seed 0x461370 at the car and at the slot's old eye with the offset's y
                 // and keep the lower answer (0x462280 / 0x462292 then 0x462297…0x4622B7; the rigid
                 // branch 0x4621BB / 0x4621CD)
@@ -1468,6 +1483,7 @@ impl App {
                     // centre, and the update returns before the follow; the eye's y is the lower of the
                     // two ceiling tests
                     self.chase_offset = Some((snap, view));
+                    self.chase_prev = None;
                     let mut a = car_rot * Vec3::new(off.x, off.y, -off.z);
                     a.y = lowest(a.y);
                     self.camera.position = car_pos + a;
@@ -1479,9 +1495,10 @@ impl App {
                     let oe = self.slot_eye.unwrap_or(car_pos + target);
                     let mut tgt = target;
                     if let Some(w) = world {
-                        tgt.y = ceiling_at(w, car_pos, car_pos, tgt.y).min(ceiling_at(w, oe, car_pos, tgt.y));
+                        tgt.y = ceiling_at(w, tick_pos, tick_pos, tgt.y).min(ceiling_at(w, oe, tick_pos, tgt.y));
                     }
                     for _ in 0..steps {
+                        self.chase_prev = Some((cur, view));
                         let (k, ky) = if self.chase_settle > 0 {
                             self.chase_settle -= 1;
                             (0.1, 0.1)
@@ -1504,8 +1521,18 @@ impl App {
                         }
                     }
                     self.chase_offset = Some((cur, view));
-                    self.camera.position = car_pos + cur;
-                    self.camera.target = car_pos + aim_lift;
+                    if steps > 0 {
+                        fixed_chase_eye = Some(tick_pos + cur);
+                        self.slot_eye = fixed_chase_eye;
+                    }
+                    let draw_offset = if !audio && last_upd && self.flip_side.is_none() {
+                        Self::blend_chase_offset(self.chase_prev, cur, view, alpha)
+                    } else {
+                        cur
+                    };
+                    let draw_pos = if last_upd { frame_car_pos } else { car_pos };
+                    self.camera.position = draw_pos + draw_offset;
+                    self.camera.target = draw_pos + aim_lift;
                     self.camera.up = Vec3::Y;
                 }
             } else if chases {
@@ -1759,7 +1786,7 @@ impl App {
                 }
             }
             if !last_upd {
-                self.slot_eye = Some(self.camera.position);
+                self.slot_eye = fixed_chase_eye.or(Some(self.camera.position));
             }
         }
         // diagnostic (`RUST_LOG=camslot=debug`): the slot's eye `+0x24` after this frame's updates
@@ -1812,7 +1839,11 @@ impl App {
         }
         // the slot keeps its own eye `+0x24`; the pushes and the clamp below act on the copy the build
         // hands out (0x4651BF…0x4651DB)
-        self.slot_eye = Some(self.camera.position);
+        self.slot_eye = if matches!(view, 2..=7) && !rear_view && self.flip_side.is_none() && self.orbit.base.is_none() {
+            fixed_chase_eye.or(self.slot_eye)
+        } else {
+            Some(self.camera.position)
+        };
         // **The build's pushes** (0x4651E4…0x465233), for views whose slot flags carry 0x10 — the
         // table's 0x08: views 2…0x0A, 0x10 and 0x11 (`race-logic.md` §11): the prop push 0x4649E0,
         // then the wall push 0x464500
@@ -1968,6 +1999,7 @@ impl App {
             anim_cam: self.anim_cam,
             anim_cam_counter: self.anim_cam_counter,
             chase_offset: self.chase_offset,
+            chase_prev: self.chase_prev,
             chase_settle: self.chase_settle,
             slot_view: self.slot_view,
             slot_seen: self.slot_seen,
@@ -1991,6 +2023,7 @@ impl App {
         swap(&mut self.anim_cam, &mut s.anim_cam);
         swap(&mut self.anim_cam_counter, &mut s.anim_cam_counter);
         swap(&mut self.chase_offset, &mut s.chase_offset);
+        swap(&mut self.chase_prev, &mut s.chase_prev);
         swap(&mut self.chase_settle, &mut s.chase_settle);
         swap(&mut self.slot_view, &mut s.slot_view);
         swap(&mut self.slot_seen, &mut s.slot_seen);
@@ -2033,7 +2066,7 @@ impl App {
         self.swap_cam_slot(&mut slot);
         // `camera_pass` counts the ticks done: the update of this tick is the one that brings the count to `tick + 1`
         self.tick += 1;
-        self.camera_pass(h.pos, h.rot, rear_view, true);
+        self.camera_pass(h.pos, h.rot, rear_view, true, 1.0);
         self.tick -= 1;
         let out = (self.camera.position, self.camera.target);
         self.swap_cam_slot(&mut slot);
@@ -2045,6 +2078,24 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chase_render_samples_follow_car_phase_and_join_at_tick_boundaries() {
+        // A corner and a crest change both the car position and the chase offset.
+        let cars = [Vec3::ZERO, Vec3::new(1.0, 0.5, 2.0), Vec3::new(2.5, 1.5, 3.0)];
+        let offsets = [Vec3::new(0.0, 2.0, -7.0), Vec3::new(-0.5, 2.2, -6.8), Vec3::new(-1.0, 2.5, -6.5)];
+        for i in 1..cars.len() {
+            for alpha in [0.0, 0.125, 0.5, 0.875, 1.0] {
+                let eye = cars[i - 1].lerp(cars[i], alpha)
+                    + App::blend_chase_offset(Some((offsets[i - 1], 2)), offsets[i], 2, alpha);
+                let expected = (cars[i - 1] + offsets[i - 1]).lerp(cars[i] + offsets[i], alpha);
+                assert!(eye.abs_diff_eq(expected, 1e-5));
+            }
+        }
+        // View changes and initialization must not blend unrelated offsets.
+        assert_eq!(App::blend_chase_offset(Some((offsets[0], 3)), offsets[1], 2, 0.0), offsets[1]);
+        assert_eq!(App::blend_chase_offset(None, offsets[1], 2, 0.0), offsets[1]);
+    }
 
     /// `blend_pose` / `blend_steer` against the expressions they replaced in `dyn_items` and
     /// `rebuild_scene` (bit for bit: the same calls in the same order).

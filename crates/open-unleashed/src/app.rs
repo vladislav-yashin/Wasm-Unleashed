@@ -619,6 +619,8 @@ pub(crate) struct App {
     /// The chase camera's slot state (0x461E80): the eye's offset from the car `+0x08`, the view it
     /// was built for, and the `+0xC1` settle count SetSlotView starts at 0x32 (0x465848).
     pub(crate) chase_offset: Option<(Vec3, u16)>,
+    /// Offset before the latest fixed camera update, for render interpolation only.
+    pub(crate) chase_prev: Option<(Vec3, u16)>,
     pub(crate) chase_settle: u8,
     /// The view slot 0 was on at the last camera pass: a change is a SetSlotView, whose seed 0x465CF0 of the
     /// offset `+0x08` (`chase_offset`) the pass applies. `None` until the first pass (the race's init).
