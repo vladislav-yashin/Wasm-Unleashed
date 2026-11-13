@@ -110,7 +110,11 @@ frame. It is a platform setting and independent of the game's own `Graphics` scr
 that screen's `Resolutions` list has one row (the canvas) and cannot change the page's size.
 Browser audio uses CPAL's Web Audio output, with asynchronous music feeding and
 resume on user interaction. It does not yet use a dedicated AudioWorklet mixer.
-Wheel force feedback and network sessions are unavailable in the web version.
+Wheel force feedback and network sessions are unavailable in the web version. Controller rumble
+is driven through the browser's Gamepad API in Chrome, Edge and Safari 16.4+; Firefox does not
+expose gamepad rumble yet. The pad does not buzz with the engine: rough shoulders, verges and grass
+rumble, tyre scrub and wheelspin are felt near the grip limit, locked front wheels pulse while
+braking, and a gear change gives a short kick.
 
 ## Interface language
 
@@ -200,7 +204,8 @@ covered by the engine's GPL license.
 
 The non-commercial project landing lists keyboard, touch and standard browser
 Gamepad API controller support. Gamepads require a button press or stick movement
-before the browser exposes them; device/browser compatibility varies.
+before the browser exposes them; device/browser compatibility varies. Rumble follows
+the browser's haptics support and works once the controller is active.
 
 The play screen reuses the landing artwork and palette, with separate connection,
 resource preparation and engine startup stages. Resource progress counts prepared

@@ -116,6 +116,20 @@ pub(crate) fn rally_reads_as_two(nibble: usize, rally: bool) -> bool {
     rally && (nibble == 1 || nibble == 10)
 }
 
+/// The amplitude and period (metres of travel) of `Roughness` 0x499730 for a surface nibble, as
+/// `ground.rs` draws them; smooth surfaces (asphalt = 1, and anything not listed) have no roughness
+/// at all. Public so the gamepad haptics can tell a shoulder from asphalt without duplicating the
+/// table.
+#[inline]
+pub fn roughness_profile(surface: usize) -> (f32, f32) {
+    match surface & 0xF {
+        3 | 5 | 9 => (0.1, 2.5),
+        2 | 7 => (0.03, 0.25),
+        4 | 10 => (0.03, 0.5),
+        _ => (0.0, 0.5),
+    }
+}
+
 /// The original's cheap two-axis norm, `max(a, b) + 0.25 · min(a, b)` (0x49BEA9…0x49BF02; the
 /// operands are magnitudes). Not a true norm: the gates and the tyre's combined slip read it.
 #[inline]

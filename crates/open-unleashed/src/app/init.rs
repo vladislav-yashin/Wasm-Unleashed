@@ -403,6 +403,7 @@ impl App {
             gamepads: Gamepads::new(),
             ff: None,
             ff_levels: nfs_physics::force_feedback::FfLevels { total: 50, road: 50, engine: 50, collision: 50, grip: 50 },
+            pad_ff: Default::default(),
             car_pos: Vec3::ZERO,
             car_rot: Quat::IDENTITY,
             specs,

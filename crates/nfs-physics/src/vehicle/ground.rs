@@ -17,12 +17,7 @@ impl Vehicle {
         if self.cos_tilt < 0.86 {
             return 0.0;
         }
-        let (amp, period) = match self.wheels[i].surface & 0xF {
-            3 | 5 | 9 => (0.1, 2.5),
-            2 | 7 => (0.03, 0.25),
-            4 | 10 => (0.03, 0.5),
-            _ => (0.0, 0.5),
-        };
+        let (amp, period) = roughness_profile(self.wheels[i].surface);
         let speed_est = self.speed_est;
         let w = &mut self.wheels[i];
         // `phase += car+0x35C · 1/32` (0x4997CC…0x4997DE): the held-over speed estimate

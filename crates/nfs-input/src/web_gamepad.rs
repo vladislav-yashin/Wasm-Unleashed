@@ -1,5 +1,80 @@
+use crate::rumbler::Rumbler;
 use crate::{InputState, bindings::PadRecord};
 use wasm_bindgen::JsCast;
+
+/// The browser's haptics: `Gamepad.vibrationActuator.playEffect("dual-rumble", …)` in Chrome,
+/// Edge and Safari 16.4+, or the legacy `hapticActuators[0].pulse` (kept for browsers that still
+/// implement it; Firefox exposes the property but has no backend behind it, Bugzilla 680289).
+/// `web-sys` exposes the vibration actuator only under `web_sys_unstable_apis` (and
+/// `hapticActuators` not at all in current Chrome), so the call is made from a small JS shim. Both
+/// entry points catch the promise's rejection: a hidden page, a controller without haptics or a
+/// closed actuator answers `InvalidStateError` / `NotSupportedError`, and an unhandled rejection
+/// would reach the console.
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = r#"
+function nfsRumbleTargets() {
+  if (typeof navigator.getGamepads !== 'function') return [];
+  let pads;
+  try { pads = navigator.getGamepads(); } catch (_) { return []; }
+  const out = [];
+  for (const pad of pads) {
+    if (!pad || !pad.connected || pad.mapping !== 'standard') continue;
+    const actuator = pad.vibrationActuator;
+    if (actuator && typeof actuator.playEffect === 'function') out.push({ actuator, pulse: false });
+    else if (pad.hapticActuators && pad.hapticActuators[0] && typeof pad.hapticActuators[0].pulse === 'function') out.push({ actuator: pad.hapticActuators[0], pulse: true });
+  }
+  return out;
+}
+function nfsRumbleIgnore(result) {
+  if (result && typeof result.catch === 'function') result.catch(() => {});
+  return result;
+}
+export function nfsRumbleAvailable() {
+  return nfsRumbleTargets().length > 0;
+}
+export function nfsRumble(strong, weak, ms) {
+  const target = nfsRumbleTargets()[0];
+  if (!target) return false;
+  const low = Math.max(0, Math.min(1, strong / 65535));
+  const high = Math.max(0, Math.min(1, weak / 65535));
+  try {
+    if (target.pulse) {
+      if (low === 0 && high === 0) return true;
+      nfsRumbleIgnore(target.actuator.pulse(Math.max(low, high), Math.max(1, ms | 0)));
+      return true;
+    }
+    if (low === 0 && high === 0) {
+      if (typeof target.actuator.reset === 'function') nfsRumbleIgnore(target.actuator.reset());
+      else nfsRumbleIgnore(target.actuator.playEffect('dual-rumble', { duration: 0, strongMagnitude: 0, weakMagnitude: 0 }));
+      return true;
+    }
+    nfsRumbleIgnore(target.actuator.playEffect('dual-rumble', {
+      startDelay: 0,
+      duration: Math.max(1, ms | 0),
+      strongMagnitude: low,
+      weakMagnitude: high,
+    }));
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+"#)]
+extern "C" {
+    #[wasm_bindgen(js_name = nfsRumbleAvailable)]
+    fn rumble_available() -> bool;
+    #[wasm_bindgen(js_name = nfsRumble)]
+    fn rumble_play(strong: u16, weak: u16, ms: u32) -> bool;
+}
+
+/// Where the browser rumbler's calls go ([`crate::rumbler::RumbleSink`]).
+struct WebSink;
+
+impl crate::rumbler::RumbleSink for WebSink {
+    fn rumble(&mut self, low: u16, high: u16, ms: u32) -> bool {
+        rumble_play(low, high, ms)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Button {
     South,
@@ -141,8 +216,26 @@ impl PadSnapshot {
         BUTTON_ORDER.iter().position(|x| *x == b).is_some_and(|n| self.buttons[n])
     }
 }
-#[derive(Default)]
-pub struct Gamepads { pads: Vec<(String, PadSnapshot)>, previous: Vec<PadSnapshot>, hotplug: bool }
+/// How long one browser rumble effect runs. A Gamepad API effect is duration-based (there is no
+/// "infinite" one), so [`Rumbler`] renews a sustained level after half of it; the value is also
+/// longer than the longest jolt (1.5 s, the platform's clamp), so a pulse never ends early.
+const WEB_SUSTAIN_MS: u32 = 2_000;
+
+pub struct Gamepads {
+    pads: Vec<(String, PadSnapshot)>,
+    previous: Vec<PadSnapshot>,
+    hotplug: bool,
+    /// set when a controller that can rumble was connected; taken by [`Gamepads::take_ff_hotplug`]
+    ff_hotplug: bool,
+    rumbler: Rumbler,
+}
+
+impl Default for Gamepads {
+    fn default() -> Self {
+        Self { pads: Vec::new(), previous: Vec::new(), hotplug: false, ff_hotplug: false, rumbler: Rumbler::new(WEB_SUSTAIN_MS) }
+    }
+}
+
 impl Gamepads {
     pub fn new() -> Self { Self::default() }
     pub fn poll(&mut self, input: &mut InputState) {
@@ -177,6 +270,13 @@ impl Gamepads {
             self.pads.push((pad.id(), snapshot));
         }
         self.hotplug |= self.pads.len() != self.previous.len();
+        // PAD-HANG: force feedback is armed once, at the race's start, so a controller that
+        // appears later (or that the browser only reveals after a button press) re-arms it
+        if self.pads.len() > self.previous.len() && rumble_available() {
+            self.ff_hotplug = true;
+        }
+        // a sustained level the rate limit held back, or the end of a pulse, goes out now
+        self.rumbler.flush(&mut WebSink);
         input.set_pads(&self.records());
     }
     pub fn records(&self) -> Vec<PadRecord> { self.pads.iter().map(|(_, p)| pad_record(p)).collect() }
@@ -185,12 +285,29 @@ impl Gamepads {
     pub fn axis_sets(&self) -> Vec<PadAxisSet> { self.records().iter().map(|r| PadAxisSet { mask:r.mask, values:r.axes }).collect() }
     pub fn pad_snapshot(&self) -> Option<PadSnapshot> { self.pads.first().map(|(_,p)| *p) }
     pub fn take_pad_hotplug(&mut self) -> bool { std::mem::take(&mut self.hotplug) }
-    pub fn take_ff_hotplug(&mut self) -> bool { false }
-    pub fn rumble_supported(&self) -> bool { false }
-    pub fn rumble_sustain(&mut self, _: crate::ff::Motor, _: f32) {}
-    pub fn rumble_pulse(&mut self, _: f32, _: u32) {}
-    pub fn rumble_stop_all(&mut self) {}
-    pub fn rumble_describe(&self) -> String { "Browser controller".into() }
+    pub fn take_ff_hotplug(&mut self) -> bool { std::mem::take(&mut self.ff_hotplug) }
+    /// Whether a connected standard controller exposes haptics the browser can drive.
+    pub fn rumble_supported(&self) -> bool { rumble_available() }
+    pub fn rumble_sustain(&mut self, motor: crate::ff::Motor, level: f32) {
+        self.rumbler.sustain(&mut WebSink, motor, level);
+    }
+    pub fn rumble_pulse(&mut self, level: f32, ms: u32) {
+        self.rumbler.pulse(&mut WebSink, level, ms);
+    }
+    pub fn rumble_stop_all(&mut self) {
+        self.rumbler.stop_all(&mut WebSink);
+    }
+    /// One line for the log: the browser backend and how many standard pads are connected. The
+    /// shim drives the first of them that exposes a haptic actuator.
+    pub fn rumble_describe(&self) -> String {
+        match self.pads.len() {
+            0 => "Gamepad API rumble, no controller connected".to_string(),
+            _ if rumble_available() => format!("Gamepad API dual-rumble (strong / weak motor), {} standard controller(s)", self.pads.len()),
+            _ => "Gamepad API rumble, the connected controller exposes no haptics".to_string(),
+        }
+    }
+    /// The `NFS_FF_TEST` glue reads the process environment, which a browser build has none of;
+    /// there is nothing to drive here.
     pub fn rumble_test_tick(&mut self) {}
     pub fn haptic_device(&mut self) -> Option<bool> { None }
     pub fn haptic_arm(&mut self, _: i32) -> Option<bool> { None }

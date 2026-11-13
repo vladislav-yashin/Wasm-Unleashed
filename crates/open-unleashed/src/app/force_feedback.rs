@@ -14,34 +14,31 @@
 //!   picks the *last* such device of 32. The port arms it on the **first** connected device SDL3 can
 //!   drive effects on (a wheel or another non-pad joystick with an SDL haptic device,
 //!   `Gamepads::haptic_device`), whatever the bindings, else on a connected pad that supports rumble
-//!   (`SDL_RumbleGamepad` on every OS). The haptic device is a wheel to 0x412D5A's class test
+//!   (`SDL_RumbleGamepad` on every desktop OS, the browser's Gamepad API on the web). The haptic
+//!   device is a wheel to 0x412D5A's class test
 //!   (`devtype & 0xFF00 == 0x600` — `dwDevType` of the legacy `DIDEVICEINSTANCE` (0x56FDB0, filled by `GetDeviceInfo`, returned by 0x532E10 kind 2): subtype 6 = `DIDEVTYPEJOYSTICK_WHEEL`) when SDL types it
 //!   `SDL_JOYSTICK_TYPE_WHEEL`; a pad never is (an Xbox pad is GAMEPAD, subtype 4 — `force-feedback.md` §2).
 //! * **A2, the effect types — a pad only.** A haptic device gets the four effects one for one
-//!   ([`di_call`], `nfs_input::ff::sdl_effect`; units and millisecond rounding there). On a pad the backend has constant strong / weak motor magnitudes only (50 ms ticks).
-//!   Road (a square wave of 6…17 Hz, magnitude ≤ 5000 of 10000) → the strong motor at a constant
-//!   level `magnitude · gain/50 · total/50` ([`pad_level`]: the factory 50 is the effect's own
-//!   magnitude, 100 doubles it up to the motor's full); engine (a sine, 10…35 Hz) → the weak motor at
-//!   `magnitude · gain/100 · total/100` ([`level`], a buzz under everything); jolt (a constant force
-//!   with a polar direction and an envelope) → a pulse of **both** motors at `pad_level` for its
-//!   duration, at least [`MIN_PULSE_MS`], the direction dropped. *(Until PAD-FF 2026-10-27 every
-//!   effect took `level`: at the factory 50 / 50 a crash was a quarter of the strong motor over the
-//!   engine's buzz on the weak one, the road 6…12 %, and the landing's 500 µs jolt a 1 ms call no
-//!   motor spins up in — on an Xbox pad a crash was hardly felt and a landing not at all.)* The spring that
-//!   carries the grip / self-aligning feel (`FfCommand::Spring`) has **no counterpart on a pad** and
-//!   is not output.
+//!   ([`di_call`], `nfs_input::ff::sdl_effect`; units and millisecond rounding there). A pad has
+//!   only a strong / weak motor, so its mix is the port's own (`nfs_input::pad_haptics`, revised
+//!   2026-11-13): rough ground drives the strong motor, front-wheel scrub the weak one, rear-wheel
+//!   scrub / wheelspin the strong one plus chatter on the weak, ABS-like pulses while a front wheel
+//!   is locked, and one kick per gear change. The engine's continuous sine is **not** replayed —
+//!   at the factory levels it ran the weak motor at 12–20 % all the time and read as a buzz, not
+//!   as the car; its job belongs to the engine sound. The spring that carries the grip /
+//!   self-aligning feel (`FfCommand::Spring`) has no wheel counterpart on a pad, but its slip signal
+//!   (the tyre model's own `Wheel::slip`, the same figure the original's spring reads) is what the
+//!   grip cue above is built from, so `FF.RoadGripVolume` does something on a pad. A jolt (a
+//!   constant force with a polar direction and an envelope) stays a pulse of **both** motors at
+//!   `pad_level` for its duration, at least [`MIN_PULSE_MS`], the direction dropped.
 //! * **A3, the clock.** `[0x6559E0]`, the 128 Hz counter the jolt's re-arm window and left/right
 //!   parity read, is the simulation's own: `2 · tick`, plus 1 for the collision pass (the effect
 //!   only needs a monotonic counter).
 
 use super::*;
 use nfs_input::ff::{DiCall, DiSlot, Motor};
+use nfs_input::pad_haptics::{PadLevels, PadMixer, PadSignals};
 use nfs_physics::force_feedback::{FfCar, FfCommand, FfEffect, FfLevels, ForceFeedback};
-
-/// `DICONDITION` / `dwGain` scale: a level is a percentage, the effect's magnitude a figure of 10000.
-fn level(magnitude: i32, gain: i32, total: i32) -> f32 {
-    (magnitude as f32 / 10000.0) * (gain as f32 / 100.0) * (total as f32 / 100.0)
-}
 
 /// A2 on a pad: the factory level 50 of both the effect's gain and the total is the effect's own
 /// magnitude, capped at the motor's full (PORT-DEVIATION D24).
@@ -71,6 +68,7 @@ impl App {
     pub(crate) fn ff_arm(&mut self) {
         let _ = self.gamepads.take_ff_hotplug();
         self.gamepads.rumble_stop_all();
+        self.pad_ff.reset();
         // A1: a device with SDL haptic effects first (0x411D20 creates the four effects and sets the
         // device gain from `FF.TotalVolume`, 0x5333A0), else a pad's rumble
         if let Some(wheel) = self.gamepads.haptic_arm(self.ff_levels().total) {
@@ -89,6 +87,9 @@ impl App {
             let cmds = ff.stop_all();
             ff_output(&mut self.gamepads, &cmds, self.ff_levels.total);
         }
+        // the pad mix's own levels are not in `cmds`; stop them and forget the ABS / gear clock
+        self.pad_ff.reset();
+        self.gamepads.rumble_stop_all();
     }
 }
 
@@ -138,7 +139,10 @@ pub(crate) fn di_call(c: &FfCommand) -> DiCall {
     }
 }
 
-/// Send the platform calls to the armed haptic device, or map them onto the pad's rumble (A2).
+/// Send the platform calls to the armed haptic device, or the collision jolts to the pad (A2).
+/// The pad's sustained road / grip / ABS levels are the pad mix's own ([`ff_drive`]); the
+/// original's periodic road and engine commands are not replayed there, and its engine sine is
+/// deliberately dropped (see the module notes).
 pub(crate) fn ff_output(pads: &mut nfs_input::gamepad::Gamepads, cmds: &[FfCommand], total: i32) {
     if pads.haptic_armed() {
         for c in cmds {
@@ -147,25 +151,22 @@ pub(crate) fn ff_output(pads: &mut nfs_input::gamepad::Gamepads, cmds: &[FfComma
         return;
     }
     for c in cmds {
-        if !matches!(c, FfCommand::Spring { .. }) {
-            tracing::debug!(?c, "force feedback command");
-        }
-        match *c {
-            FfCommand::Stop(FfEffect::Road) => pads.rumble_sustain(Motor::Strong, 0.0),
-            FfCommand::Stop(FfEffect::Engine) => pads.rumble_sustain(Motor::Weak, 0.0),
-            FfCommand::Stop(FfEffect::Collision | FfEffect::Grip) => {}
-            FfCommand::Periodic { effect: FfEffect::Road, magnitude, gain, .. } => pads.rumble_sustain(Motor::Strong, pad_level(magnitude, gain, total)),
-            FfCommand::Periodic { effect: FfEffect::Engine, magnitude, gain, .. } => pads.rumble_sustain(Motor::Weak, level(magnitude, gain, total)),
-            FfCommand::Periodic { .. } => {}
-            FfCommand::Spring { .. } => {}
-            FfCommand::Jolt { magnitude, duration_us, gain, .. } => pads.rumble_pulse(pad_level(magnitude, gain, total), ((duration_us.max(0) / 1000) as u32).max(MIN_PULSE_MS)),
+        if let FfCommand::Jolt { magnitude, duration_us, gain, .. } = *c {
+            pads.rumble_pulse(pad_level(magnitude, gain, total), ((duration_us.max(0) / 1000) as u32).max(MIN_PULSE_MS));
         }
     }
 }
 
 /// The driver 0x4123E0, once per Sc32 tick, before the player's physics step (priority 10 against
 /// the car's 0x1E): reads the car as the previous tick left it.
-pub(crate) fn ff_drive(ff: &mut Option<ForceFeedback>, pads: &mut nfs_input::gamepad::Gamepads, t: FfTick, car: &FfCar) {
+pub(crate) fn ff_drive(
+    ff: &mut Option<ForceFeedback>,
+    pads: &mut nfs_input::gamepad::Gamepads,
+    pad_ff: &mut PadMixer,
+    t: FfTick,
+    car: &FfCar,
+    vehicle: &Vehicle,
+) {
     let FfTick { levels, replay, tick } = t;
     let Some(ff) = ff.as_mut() else { return };
     if !ff.enabled {
@@ -173,6 +174,51 @@ pub(crate) fn ff_drive(ff: &mut Option<ForceFeedback>, pads: &mut nfs_input::gam
     }
     let cmds = ff.tick(car, levels, replay, ff_clock(tick));
     ff_output(pads, &cmds, levels.total);
+    if pads.haptic_armed() {
+        // A1: the race's force feedback went to the wheel; a pad beside it stays quiet
+        return;
+    }
+    if replay {
+        // 0x41240E: the effects are not driven during a replay; the pad mix must go quiet too
+        pad_ff.reset();
+        pads.rumble_stop_all();
+        return;
+    }
+    let out = pad_ff.update(&pad_signals(vehicle), PadLevels { total: levels.total, road: levels.road, grip: levels.grip });
+    pads.rumble_sustain(Motor::Strong, out.strong);
+    pads.rumble_sustain(Motor::Weak, out.weak);
+    if let Some((level, ms)) = out.pulse {
+        pads.rumble_pulse(level, ms);
+    }
+}
+
+/// The car state the pad mix reads. `Wheel::slip` is the tyre model's 0…1 slide figure (what the
+/// original's spring reads); the roughness class comes from the wheels actually touching the
+/// ground, so two wheels on a shoulder rumble while the body is still over asphalt. Only the
+/// 0.1 m classes (grass, gravel, a real kerb) are felt: the 0.03 m classes (2 / 4 / 7 / 10) are
+/// mild texture that belongs to the sound, not to a permanent buzz on a straight.
+fn pad_signals(v: &Vehicle) -> PadSignals {
+    let slip = |i: usize| if v.wheels[i].contact { v.wheels[i].slip } else { 0.0 };
+    let roughness = v
+        .wheels
+        .iter()
+        .filter(|w| w.contact)
+        .map(|w| {
+            let (amp, _) = nfs_physics::vehicle::roughness_profile(w.surface);
+            if amp >= 0.08 { (amp / 0.1).clamp(0.0, 1.0) } else { 0.0 }
+        })
+        .fold(0.0, f32::max);
+    PadSignals {
+        grounded: v.airborne_count == 0 && v.body_height >= 0.0,
+        speed: v.horizontal_speed(),
+        throttle: v.throttle.clamp(0.0, 1.0),
+        brake: v.brake.clamp(0.0, 1.0),
+        front_slip: slip(0).max(slip(1)),
+        rear_slip: slip(2).max(slip(3)),
+        front_locked: v.wheels[0].locked || v.wheels[1].locked,
+        roughness,
+        gear: v.gear,
+    }
 }
 
 /// 0x40F740 → 0x412230, for the player's car, after the tick's contact words are final.
@@ -201,7 +247,6 @@ mod tests {
         assert_eq!(pad_level(5000, 100, 100), 1.0);
         assert_eq!(pad_level(10000, 25, 50), 0.5);
         assert_eq!(pad_level(10000, 0, 50), 0.0);
-        assert_eq!(level(10000, 50, 50), 0.25);
     }
 
     /// PAD-HANG: a pad arriving after the race armed with nothing is armed; one arriving beside the

@@ -28,8 +28,12 @@ the bar is up (never while driving): d-pad / left stick picks, A answers, B goes
 
 The game runs in the browser canvas. The fullscreen button in the browser toolbar enters browser
 fullscreen; click the canvas first if the keyboard does not respond. Gamepads are read through the browser's
-Gamepad API and work after the first button press or stick movement; wheel force feedback is unavailable in
-the browser. **Exit** in the game's front end saves the progress, leaves browser fullscreen and returns
+Gamepad API and work after the first button press or stick movement. Wheel force feedback is unavailable in
+the browser, and controller rumble works in Chrome, Edge and Safari 16.4+; Firefox does not expose gamepad
+rumble yet. On a pad the engine does not buzz continuously: rough shoulders, verges and grass rumble, tyre
+scrub and wheelspin are felt near the grip limit, locked front wheels pulse while braking, and a gear change
+gives a short kick. `FF.RoadGripVolume` sets the strength of the tyre and ABS cues; `FF.EngineVolume` only affects a
+wheel, since a pad gets the engine through its sound. **Exit** in the game's front end saves the progress, leaves browser fullscreen and returns
 to the site's home page; a page cannot close its own tab. Quitting a race from its pause menu returns to
 the game's front end.
 

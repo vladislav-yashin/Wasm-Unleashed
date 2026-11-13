@@ -449,6 +449,9 @@ pub(crate) struct App {
     pub(crate) ff: Option<nfs_physics::force_feedback::ForceFeedback>,
     /// The five `FF.*` levels, refreshed each tick.
     pub(crate) ff_levels: nfs_physics::force_feedback::FfLevels,
+    /// The port's own gamepad haptics mix (PORT-DEVIATION D24 A2): rough-ground texture, tyre
+    /// scrub, ABS pulses and gear kicks; the engine's continuous sine is not replayed.
+    pub(crate) pad_ff: nfs_input::pad_haptics::PadMixer,
     pub(crate) car_pos: Vec3,
     pub(crate) car_rot: Quat,
     pub(crate) specs: CarSpecs,

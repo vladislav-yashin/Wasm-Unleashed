@@ -1,10 +1,4 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Motor {
-    /// the heavy, low-frequency motor
-    Strong,
-    /// the light, high-frequency motor
-    Weak,
-}
+pub use crate::rumbler::Motor;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiSlot {
     /// slot 0, `GUID_ConstantForce` — the collision jolt

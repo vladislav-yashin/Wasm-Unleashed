@@ -1642,7 +1642,14 @@ impl App {
         v.wet_track = self.track.name.eq_ignore_ascii_case("autobahn") && w.overhead_flags(v.position) == 0;
         // 0x4123E0, the force-feedback driver: Sc32 priority 10, before the car's step (priority
         // 0x1E) — it reads what the last tick left
-        super::force_feedback::ff_drive(&mut self.ff, &mut self.gamepads, super::force_feedback::FfTick { levels: self.ff_levels, replay: ff_replay, tick: self.tick }, &nfs_physics::force_feedback::FfCar::from_vehicle(v, &self.specs));
+        super::force_feedback::ff_drive(
+            &mut self.ff,
+            &mut self.gamepads,
+            &mut self.pad_ff,
+            super::force_feedback::FfTick { levels: self.ff_levels, replay: ff_replay, tick: self.tick },
+            &nfs_physics::force_feedback::FfCar::from_vehicle(v, &self.specs),
+            v,
+        );
         v.step32(&controls, &self.specs, &w.collision);
         // the remote cars' `Car_simulate` (a positional race) with an index above this machine's
         // own, after the player's, in race-index order (above)

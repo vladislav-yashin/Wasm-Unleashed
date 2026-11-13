@@ -7,6 +7,9 @@
 //! 0x7E (252 on the car) — full scale; the ±12-a-tick steering ramp a key gets (`.RAMPS`) is the
 //! physics'.
 
+pub mod pad_haptics;
+mod rumbler;
+
 pub mod bindings;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ff;
