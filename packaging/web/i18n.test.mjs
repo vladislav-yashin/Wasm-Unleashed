@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { apply, CATALOG, detectLocale, getLocale, LOCALES, normalizeLocale, onLocaleChange, setLocale, t } from './i18n.mjs';
 
-const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+const html = readFileSync(new URL('./game.html', import.meta.url), 'utf8');
 const bootstrap = readFileSync(new URL('./bootstrap.mjs', import.meta.url), 'utf8');
 
 test('every catalog carries the English keys and no empty text', () => {
@@ -42,12 +42,15 @@ test('locale tags normalize to a shipped catalog', () => {
   assert.equal(normalizeLocale(undefined), null);
 });
 
-test('locale precedence is query, saved choice, browser languages, English', () => {
+test('locale precedence is query, saved choice, English regardless of browser languages', () => {
   assert.equal(detectLocale({ search: '?data=x&lang=de-AT', languages: ['fr-FR'], stored: 'it' }), 'de');
   assert.equal(detectLocale({ search: '?lang=xx', languages: ['fr-FR'], stored: 'it' }), 'it');
-  assert.equal(detectLocale({ search: '', languages: ['es-MX', 'en-US'], stored: 'xx' }), 'es');
+  assert.equal(detectLocale({ search: '', languages: ['es-MX', 'en-US'], stored: 'xx' }), 'en');
   assert.equal(detectLocale({ search: '', languages: ['pt-BR'], stored: null }), 'en');
   assert.equal(detectLocale({ search: '', languages: [], stored: null }), 'en');
+  assert.equal(detectLocale({ search: '', languages: ['ru-RU'], stored: null }), 'en');
+  assert.equal(detectLocale({ search: '', languages: ['en-US'], stored: 'ru' }), 'ru');
+  assert.equal(detectLocale({ search: '?lang=en', stored: 'ru' }), 'en');
 });
 
 test('an explicit choice is saved and updates the document language', () => {
@@ -97,10 +100,10 @@ test('apply translates text and accessibility attributes', () => {
   assert.equal(title.getAttribute('title'), 'Полноэкранный режим');
 });
 
-test('index.html uses known keys and offers every catalog', () => {
+test('game.html uses known keys and offers every catalog', () => {
   const keys = [...html.matchAll(/data-i18n(?:-[a-z-]+)?="([^"]+)"/g)].map(match => match[1]);
   assert.ok(keys.length > 0);
-  for (const key of keys) assert.ok(CATALOG.en[key], `index.html: ${key}`);
+  for (const key of keys) assert.ok(CATALOG.en[key], `game.html: ${key}`);
   const options = [...html.matchAll(/<option value="([a-z]+)">/g)].map(match => match[1]);
   assert.deepEqual(options, LOCALES);
   assert.match(html, /<html lang="en">/);

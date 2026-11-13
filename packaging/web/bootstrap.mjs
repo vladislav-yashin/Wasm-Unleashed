@@ -29,11 +29,83 @@ const message = (key, params) => () => t(key, params);
 onLocaleChange(() => { apply(); for (const [node, render] of dynamic) node.textContent = render(); });
 let fs, initialized = false;
 let recovery = false;
-const report = error => {
-  recovery ||= initialized || !!document.querySelector('canvas');
-  say(status, () => String(error.message || error)); loader.hidden = false;
+let launching = false;
+let loadingFailure;
+let rejectReady;
+const count = document.querySelector('#loading-count');
+const percent = document.querySelector('#loading-percent');
+const details = document.querySelector('#loading-details');
+const errorText = document.querySelector('#loading-error');
+const steps = [...document.querySelectorAll('[data-step]')];
+function showLoading(stage, key, { compact = false } = {}) {
+  loader.dataset.presentation = compact ? 'compact' : 'startup';
+  loader.setAttribute('aria-labelledby', compact ? 'status' : 'loading-title');
+  loader.hidden = false;
+  loader.dataset.state = 'loading';
+  loader.setAttribute('aria-busy', 'true');
+  details.hidden = true;
+  details.open = false;
+  errorText.textContent = '';
+  start.hidden = true;
+  progress.removeAttribute('value');
+  count.textContent = ''; dynamic.delete(count);
+  percent.textContent = '…';
+  const index = steps.findIndex(step => step.dataset.step === stage);
+  steps.forEach((step, i) => {
+    if (i === index) step.setAttribute('aria-current', 'step');
+    else step.removeAttribute('aria-current');
+    step.dataset.complete = String(i < index);
+  });
+  say(status, message(key));
+}
+function showProgress(done, total) {
+  progress.max = Math.max(total, 1);
+  progress.value = done;
+  percent.textContent = `${total ? Math.floor(done / total * 100) : 0}%`;
+  say(count, message('loading.prepared', {done, total}));
+}
+function finishLoading() {
+  loader.hidden = true;
+  loader.setAttribute('aria-busy', 'false');
+  document.querySelector('canvas')?.focus();
+}
+// wasm-bindgen initialization starts the asynchronous renderer. Keep the loading
+// screen until the application reports a playable state, rather than flashing black.
+function waitForGame() {
+  if (loadingFailure) return Promise.reject(loadingFailure);
+  const ready = () => ['intro', 'menu', 'race'].includes(document.documentElement.dataset.gameMode);
+  if (ready()) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const observer = new MutationObserver(() => {
+      if (!ready()) return;
+      observer.disconnect(); rejectReady = null; resolve();
+    });
+    rejectReady = error => { observer.disconnect(); rejectReady = null; reject(error); };
+    observer.observe(document.documentElement, {attributes:true, attributeFilter:['data-game-mode']});
+  });
+}
+const report = (error, {track = false} = {}) => {
+  const failure = error instanceof Error ? error : new Error(String(error));
+  loadingFailure = failure;
+  rejectReady?.(failure);
+  if (!track) {
+    recovery ||= initialized || !!document.querySelector('canvas');
+    loader.dataset.presentation = 'startup';
+    loader.setAttribute('aria-labelledby', 'loading-title');
+  }
+  loader.dataset.state = 'error';
+  if (!progress.hasAttribute('value')) progress.value = 0;
+  percent.textContent = '';
+  loader.setAttribute('aria-busy', 'false');
+  say(status, message('loading.failed'));
+  errorText.textContent = failure.message;
+  details.hidden = false;
+  start.hidden = false;
+  start.disabled = false;
+  loader.hidden = false;
   say(start, () => t(recovery ? 'action.reload' : 'action.retry'));
-  if (recovery) { flush(); start.focus(); }
+  if (recovery) flush();
+  start.focus();
 };
 globalThis.nfsFatal = text => report(new Error(text));
 window.addEventListener('unhandledrejection', event => report(event.reason));
@@ -46,12 +118,16 @@ async function flush() {
   try { await fs.flush(); say(saveStatus, message(fs.dirty.size ? 'saves.saving' : 'saves.saved')); }
   catch (error) { say(saveStatus, message('saves.failed', {error: error.message})); }
 }
-start.addEventListener('click', async () => {
+async function launch({ gesture = false } = {}) {
+  if (launching && !retryTrack && !recovery) return;
   if (recovery) { location.reload(); return; }
   if (retryTrack) { const resume = retryTrack; retryTrack = null; resume(); return; }
   // Fullscreen needs this user gesture, so ask before the first await.
-  void requestLaunchFullscreen();
+  if (gesture) void requestLaunchFullscreen();
+  launching = true;
+  loadingFailure = null;
   start.disabled = true;
+  showLoading('connect', 'loading.connecting');
   try {
     if (!fs) {
       const source = await AssetSource.open(new URLSearchParams(location.search).get('data') || './data/');
@@ -59,41 +135,39 @@ start.addEventListener('click', async () => {
       globalThis.nfsVfs = fs;
       try { await fs.openSaves(); } catch (error) { say(saveStatus, message('saves.temporary', {error: error.message})); }
     }
-    say(status, message('loading.assets'));
+    showLoading('resources', 'loading.assets');
     const tracks = Object.keys(fs.source.manifest.files).filter(path => path.startsWith('gamedata/track/'));
     const sharedTrack = path => path.endsWith('/animdefs.txt') || path.endsWith('/default.bin') || path.startsWith('gamedata/track/data/');
     const trackPaths = name => tracks.filter(path => sharedTrack(path) || !name || path.split('/').at(-1).startsWith(name.toLowerCase()));
     globalThis.nfsTrackReady = name => trackPaths(name).every(path => fs.files.has(`game/${path}`));
     globalThis.nfsPrepareTrack = async name => {
-      loader.hidden = false;
       while (true) {
-        start.hidden = true;
+        showLoading('resources', 'loading.track', {compact:true});
         try {
-          await fs.preload(trackPaths(name), (done,total,path) => { progress.max=total;progress.value=done;say(status, message('loading.progress', {done, total, path})); });
-          loader.hidden = true; start.hidden = false;
+          await fs.preload(trackPaths(name), showProgress);
+          finishLoading();
           return;
         } catch(error) {
-          say(status, () => String(error.message || error)); loader.hidden = false; say(start, message('action.retry')); start.hidden = false; start.disabled = false;
+          report(error, {track:true});
           await new Promise(resolve => { retryTrack = resolve; });
         }
       }
     };
     const initial = Object.keys(fs.source.manifest.files).filter(path => !path.startsWith('gamedata/track/') || sharedTrack(path) || path.split('/').at(-1).startsWith('alps'));
-    await fs.preload(initial, (done, total, path) => {
-      progress.max = total; progress.value = done;
-      say(status, message('loading.progress', {done, total, path}));
-    });
+    await fs.preload(initial, showProgress);
+    showLoading('engine', 'loading.engine');
     if (!initialized) {
       const { default: init } = await import('./pkg/open_unleashed.js');
       await init();
       initialized = true;
       timer = setInterval(flush, 1000);
     }
-    loader.hidden = true;
-    document.querySelector('canvas')?.focus();
+    await waitForGame();
+    finishLoading();
   } catch (error) { report(error); }
-  finally { start.disabled = false; }
-});
+  finally { launching = false; start.disabled = false; }
+}
+start.addEventListener('click', () => { void launch({gesture:true}); });
 document.querySelector('#fullscreen').onclick = async () => {
   try {
     if (document.fullscreenElement) await document.exitFullscreen();
@@ -131,3 +205,6 @@ new MutationObserver(() => {
   new MutationObserver(() => showRenderSize(canvas)).observe(canvas, {attributes:true, attributeFilter:['width', 'height']});
   showRenderSize(canvas);
 }).observe(document.body, {childList:true});
+
+// Landing links opt into immediate loading; a direct visit retains the manual Start button.
+if (new URLSearchParams(location.search).get('autostart') === '1') void launch();

@@ -62,3 +62,10 @@ Wasm Unleashed — форк проекта **OpenUnleashed**. Спасибо е�
 
 Неофициальному патчу 1.0.6 от Verok: его исправления оригинального exe этот движок воспроизводит там, где они
 меняют поведение игры.
+
+
+Главная страница веб-сборки — посадочная страница с готовым HTML для поисковых
+систем; запуск игры доступен по `game.html`. Стили собираются локально на
+Tailwind CSS. Для canonical и sitemap передайте настоящий адрес сайта:
+`python3 tools/web/build.py --site-url https://your-host.example/`.
+Подробности: [лендинг и SEO](packaging/web/README.md#landing-page-and-seo).

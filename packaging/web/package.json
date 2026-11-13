@@ -1,0 +1,12 @@
+{
+  "name": "wasm-unleashed-landing",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "build": "tailwindcss -i landing.css -o ../../dist/landing.css --minify"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.1.18",
+    "tailwindcss": "4.1.18"
+  }
+}

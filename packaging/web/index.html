@@ -1,64 +1,79 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <html lang="en">
+<head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Wasm Unleashed</title>
-<link rel="stylesheet" href="style.css">
-<body>
-<section id="loader" role="status">
-<h1>Wasm Unleashed</h1>
-<p id="status" data-i18n="status.ready">Ready to load the game</p>
-<progress id="progress" value="0" max="1"></progress>
-<button id="start" data-i18n="action.start">Start</button>
-</section>
-<button id="tools-toggle" aria-label="Game controls" data-i18n-aria-label="toolbar.controls" aria-expanded="false" aria-controls="tools">☰</button>
-<nav id="tools" aria-label="Game controls" data-i18n-aria-label="toolbar.controls">
-<button id="fullscreen" title="Toggle fullscreen" aria-label="Toggle fullscreen" data-i18n-title="toolbar.fullscreen" data-i18n-aria-label="toolbar.fullscreen">⛶</button>
-<button id="export" data-i18n="toolbar.export">Export saves</button>
-<label class="button"><span data-i18n="toolbar.import">Import</span><input id="import" type="file" accept="application/json"></label>
-<select id="language" aria-label="Language" data-i18n-aria-label="toolbar.language">
-<option value="en">English</option>
-<option value="ru">Русский</option>
-<option value="de">Deutsch</option>
-<option value="fr">Français</option>
-<option value="it">Italiano</option>
-<option value="es">Español</option>
-</select>
-<select id="render-scale" aria-label="Render scale" data-i18n-aria-label="toolbar.renderScale" title="Lower the canvas resolution for more frame rate" data-i18n-title="toolbar.renderScaleHint">
-<option value="1">100%</option>
-<option value="0.75">75%</option>
-<option value="0.5">50%</option>
-<option value="0.4">40%</option>
-</select>
-<span id="render-size" aria-hidden="true"></span>
-<span id="save-status" role="status"></span>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0e13">
+<title>Wasm Unleashed — Play Porsche Unleashed in Your Browser</title>
+<meta name="description" content="Play Wasm Unleashed in your browser. Rediscover Need for Speed: Porsche Unleashed, Evolution career and Factory Driver challenges. No installation needed.">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="en_US">
+<meta property="og:title" content="Wasm Unleashed — A classic, back on the road">
+<meta property="og:description" content="Classic Porsche racing, right in your browser. Take on Evolution career and Factory Driver challenges with Wasm Unleashed.">
+<meta name="twitter:card" content="summary_large_image">
+<meta property="og:image:alt" content="A silver Porsche 911 Turbo on an Alpine road at sunset">
+<meta name="twitter:image:alt" content="A silver Porsche 911 Turbo on an Alpine road at sunset">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="landing.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Wasm Unleashed","applicationCategory":"GameApplication","operatingSystem":"Web browser","inLanguage":"en","license":"https://www.gnu.org/licenses/gpl-3.0.html","codeRepository":"https://github.com/vladislav-yashin/Wasm-Unleashed","description":"An independent, non-commercial browser racing project recreating the Need for Speed: Porsche Unleashed experience with Rust and WebAssembly."}
+</script>
+</head>
+<body class="font-sans antialiased">
+<a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-accent focus:p-4 focus:text-ink">Skip to content</a>
+<header class="wrap flex flex-wrap items-center justify-between gap-5 border-b border-white/15 py-6">
+<a href="./" aria-label="Wasm Unleashed — home" class="flex items-center gap-3 font-black tracking-tighter"><span class="rounded bg-accent px-2 py-1 text-xl italic text-ink" aria-hidden="true">W/U</span><span>WASM<br>UNLEASHED</span></a>
+<nav aria-label="Main navigation" class="flex flex-wrap items-center gap-5 text-sm text-muted sm:gap-8">
+<a class="hover:text-paper" href="#project">The game</a><a class="hover:text-paper" href="#start">How to play</a><a class="hover:text-paper" href="#faq">FAQ</a><a class="text-paper" href="https://github.com/vladislav-yashin/Wasm-Unleashed">GitHub ↗</a>
 </nav>
-<div id="touch" aria-label="Touch controls" data-i18n-aria-label="toolbar.touch">
-<div class="race-controls steering" data-slide-group="steer">
-<button data-code="ArrowLeft" aria-label="Steer left" data-i18n-aria-label="touch.steerLeft"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M17 4 5 12l12 8Z"/></svg></button>
-<button data-code="ArrowRight" aria-label="Steer right" data-i18n-aria-label="touch.steerRight"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m7 4 12 8-12 8Z"/></svg></button>
+</header>
+<main id="main">
+<section class="wrap py-8 sm:py-10" aria-labelledby="hero-title">
+<div class="grid gap-6 lg:grid-cols-[2.05fr_1fr]">
+<div class="hero-panel relative overflow-hidden rounded-2xl border border-white/10 bg-[#10141b]">
+<div class="relative z-10 p-6 sm:p-10">
+<p class="eyebrow mb-5 text-accent">Porsche Unleashed / Browser edition</p>
+<h1 id="hero-title" class="display">A racing classic.<br><span class="text-accent">Back on the road.</span></h1>
+<p class="mt-6 max-w-lg text-base leading-relaxed text-muted sm:text-lg">The unmistakable feel of Need for Speed: Porsche Unleashed, right in your browser. The roads you remember. The career you loved. One more reason to take the long way home.</p>
+<div class="mt-7 flex flex-wrap gap-3"><a href="game.html?lang=en&amp;autostart=1" class="cta">Play now <span aria-hidden="true">↗</span></a><a href="#start" class="inline-flex items-center rounded-lg border border-white/20 px-5 py-3 text-sm font-bold text-muted hover:text-paper sm:text-base">How to play</a></div>
+<div class="mt-6 flex flex-wrap gap-2 text-xs text-muted"><span class="rounded-full border border-white/10 bg-white/5 px-3 py-2">Controller support</span><span class="rounded-full border border-white/10 bg-white/5 px-3 py-2">WebGPU / WebGL2</span><span class="rounded-full border border-white/10 bg-white/5 px-3 py-2">GPL-3.0-or-later</span></div>
 </div>
-<div class="race-controls race-actions">
-<button data-code="KeyP" data-i18n="touch.pause">Pause</button>
-<button data-code="KeyC" data-i18n="touch.camera">Camera</button>
-<button data-code="KeyA" aria-label="Shift up" data-i18n-aria-label="touch.shiftUp">+</button>
-<button data-code="KeyZ" aria-label="Shift down" data-i18n-aria-label="touch.shiftDown">−</button>
+<figure class="relative overflow-hidden border-t border-white/5"><img src="porsche-993-alpine.webp" width="1942" height="809" alt="Illustration of a silver 1995 Porsche 911 Turbo on a winding Alpine road at sunset" class="hero-art" fetchpriority="high" decoding="async"><figcaption class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-5 pb-3 pt-8 text-[10px] uppercase tracking-widest text-white">Porsche 911 Turbo · 1995 · Artwork</figcaption></figure>
+<div class="checkered h-2" aria-hidden="true"></div>
 </div>
-<div class="race-controls pedals" data-slide-group="pedals">
-<button data-code="Space" data-i18n="touch.handbrake">Handbrake</button>
-<button data-code="ArrowDown" data-i18n="touch.brake">Brake</button>
-<button data-code="ArrowUp" data-i18n="touch.throttle">Throttle</button>
+<aside class="flex flex-col gap-6" aria-label="About the browser edition">
+<section class="rounded-2xl border border-white/10 bg-[#10141b]"><h2 class="eyebrow border-b border-white/10 px-6 py-4 text-muted">Under the hood</h2><dl class="grid grid-cols-2 gap-3 p-5"><div class="rounded-lg border border-white/10 bg-black/10 p-4"><dt class="text-xs text-muted">Engine</dt><dd class="mt-2 text-xl font-extrabold">Rust</dd></div><div class="rounded-lg border border-white/10 bg-black/10 p-4"><dt class="text-xs text-muted">Platform</dt><dd class="mt-2 text-xl font-extrabold">Web</dd></div><div class="rounded-lg border border-white/10 bg-black/10 p-4"><dt class="text-xs text-muted">Graphics</dt><dd class="mt-2 font-bold">WebGPU<br>WebGL2</dd></div><div class="rounded-lg border border-white/10 bg-black/10 p-4"><dt class="text-xs text-muted">Saves</dt><dd class="mt-2 font-bold">IndexedDB</dd></div></dl><a href="https://github.com/vladislav-yashin/Wasm-Unleashed" class="cta mx-5 mb-5 flex text-sm">Source code <span aria-hidden="true">↗</span></a></section>
+<section class="flex-1 rounded-2xl border border-white/10 bg-[#10141b] p-6"><p class="eyebrow text-accent">Your next drive</p><h2 class="mt-4 text-2xl font-bold tracking-tight">Pick up where<br>nostalgia left off.</h2><p class="mt-4 text-sm leading-relaxed text-muted">Open the game, choose your mode and head for the first corner. No installer. Just you and the road.</p><a class="mt-5 inline-block text-sm font-bold text-accent hover:underline" href="game.html?lang=en&amp;autostart=1">Get behind the wheel →</a><p class="mt-5 border-t border-white/10 pt-4 text-xs leading-relaxed text-muted">Progress stays in this browser. Export your saves from the game toolbar to keep a backup.</p></section>
+</aside>
 </div>
-<div class="menu-controls menu-arrows">
-<button data-code="ArrowUp" aria-label="Up" data-i18n-aria-label="touch.up"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m4 17 8-12 8 12Z"/></svg></button>
-<button data-code="ArrowLeft" aria-label="Left" data-i18n-aria-label="touch.left"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M17 4 5 12l12 8Z"/></svg></button>
-<button data-code="ArrowDown" aria-label="Down" data-i18n-aria-label="touch.down"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m4 7 8 12 8-12Z"/></svg></button>
-<button data-code="ArrowRight" aria-label="Right" data-i18n-aria-label="touch.right"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m7 4 12 8-12 8Z"/></svg></button>
+</section>
+<section id="project" class="wrap py-14 sm:py-20" aria-labelledby="project-title">
+<div class="grid gap-8 md:grid-cols-2"><div><p class="eyebrow mb-5 text-accent">01 / The familiar feeling</p><h2 id="project-title" class="section-title">Same spirit.<br><span class="text-muted">A new ignition.</span></h2></div><p class="max-w-lg text-lg leading-relaxed text-muted md:pt-10">From your first classic to the next hard-earned upgrade, this is racing with a history. Wasm Unleashed brings the original rules, physics and rivals to a modern browser through an independent engine built in Rust.</p></div>
+<div class="mt-10 grid gap-5 md:grid-cols-3">
+<article class="rounded-xl border border-white/10 bg-[#10141b] p-7 sm:p-9"><span class="eyebrow text-muted">01 — Evolution</span><h3 class="mt-8 text-2xl font-bold tracking-tight">Decades of driving</h3><p class="mt-4 leading-relaxed text-muted">Build your career through the Evolution eras. Get to know each car, earn your next upgrade and make every race count.</p></article>
+<article class="rounded-xl border border-white/10 bg-[#10141b] p-7 sm:p-9"><span class="eyebrow text-muted">02 — Factory Driver</span><h3 class="mt-8 text-2xl font-bold tracking-tight">Precision takes the wheel</h3><p class="mt-4 leading-relaxed text-muted">Take on Factory Driver challenges. Master the line, find the balance and prove you know the car inside out.</p></article>
+<article class="rounded-xl border border-white/10 bg-[#10141b] p-7 sm:p-9"><span class="eyebrow text-muted">03 — In your browser</span><h3 class="mt-8 text-2xl font-bold tracking-tight">Less waiting. More driving.</h3><p class="mt-4 leading-relaxed text-muted">Jump in from a modern browser. Play with a keyboard, touch controls or a supported controller; local saves keep your career moving.</p></article>
 </div>
-<div class="menu-controls menu-actions">
-<button data-code="Escape" data-i18n="touch.back">Back</button><button data-code="Enter" data-i18n="touch.ok">OK</button>
+</section>
+<section id="start" class="grid-texture border-y border-white/15 bg-[#10141b] py-14 sm:py-20" aria-labelledby="start-title">
+<div class="wrap grid gap-12 lg:grid-cols-2"><div><p class="eyebrow mb-5 text-accent">02 / Green light</p><h2 id="start-title" class="section-title">Your next race.<br>One click away.</h2><p class="mt-6 max-w-md leading-relaxed text-muted">A familiar world of winding roads and iconic cars, ready in your browser. Find your rhythm and make the next corner yours.</p><a class="cta mt-8" href="game.html?lang=en&amp;autostart=1">Play now <span aria-hidden="true">↗</span></a></div>
+<ol class="space-y-7"><li class="flex gap-5 border-b border-white/15 pb-7"><span class="text-sm text-accent">01</span><div><h3 class="text-xl font-bold">Open the game</h3><p class="mt-2 leading-relaxed text-muted">Hit Play now and the game starts loading automatically. Keep the tab open while we get everything ready.</p></div></li><li class="flex gap-5 border-b border-white/15 pb-7"><span class="text-sm text-accent">02</span><div><h3 class="text-xl font-bold">Choose your drive</h3><p class="mt-2 leading-relaxed text-muted">Build a career in Evolution or put your skills to the test in Factory Driver. <a class="underline underline-offset-4 hover:text-paper" href="https://github.com/vladislav-yashin/Wasm-Unleashed/blob/main/docs/en/controls.md">Check the controls ↗</a></p></div></li><li class="flex gap-5"><span class="text-sm text-accent">03</span><div><h3 class="text-xl font-bold">Make it a long drive</h3><p class="mt-2 leading-relaxed text-muted">Your progress is saved locally. Use the game toolbar to export a backup or move your saves to another browser.</p></div></li></ol></div>
+</section>
+<section id="faq" class="wrap grid gap-10 py-14 sm:py-20 lg:grid-cols-[1fr_1.4fr]" aria-labelledby="faq-title">
+<div><p class="eyebrow mb-5 text-accent">03 / Before you hit the road</p><h2 id="faq-title" class="section-title">Good to know.</h2></div>
+<div>
+<details><summary class="text-lg font-bold">Do I need to install anything?</summary><p>No game installer is needed. Open the game in an up-to-date browser and press Start. WebGPU or WebGL2 support is required; performance depends on your browser and hardware.</p></details>
+<details><summary class="text-lg font-bold">Can I play on my phone?</summary><p>Touch controls are included for mobile browsers. Device support and performance vary, so a recent browser and a capable device are recommended. You can lower the render scale in the game toolbar if needed.</p></details>
+<details><summary class="text-lg font-bold">Where are my saves?</summary><p>Your progress is stored locally in this browser. Clearing site data can remove it. Export your saves from the game toolbar to keep a backup or transfer them to another browser.</p></details>
+<details><summary class="text-lg font-bold">Is multiplayer available?</summary><p>Not yet. The browser edition currently supports single-player modes. Browser multiplayer is planned for a later stage.</p></details>
+<details><summary class="text-lg font-bold">Can I use a controller?</summary><p>Yes. Standard gamepads are supported through your browser’s Gamepad API. Connect your controller, then press a button or move a stick so the browser can detect it. Adjust bindings in Options → Controls if needed. Support depends on the browser and controller; wheel force feedback is not available.</p></details>
+<details><summary class="text-lg font-bold">Is this an official release?</summary><p>Wasm Unleashed is an independent, non-commercial community project based on OpenUnleashed. It is not affiliated with or endorsed by Electronic Arts, Eden Games or Porsche AG.</p></details>
+<details><summary class="text-lg font-bold">Is the engine open source?</summary><p>Yes. The engine and website source are available under GNU GPL version 3 or later. This license applies to the project code; game content and trademarks remain subject to their respective owners’ rights. <a href="LICENSE" class="underline underline-offset-4">Read the license</a> or <a href="https://github.com/vladislav-yashin/Wasm-Unleashed" class="underline underline-offset-4">explore the source</a>.</p></details>
 </div>
-</div>
-<input id="text-input" hidden aria-label="Profile name" data-i18n-aria-label="input.profileName" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done">
-<script type="module" src="bootstrap.mjs"></script>
-</body></html>
+</section>
+<section class="wrap mb-16 rounded-xl flex flex-wrap items-center justify-between gap-8 bg-accent p-8 text-ink sm:p-12"><div><p class="eyebrow mb-4">Non-commercial · Community-built</p><h2 class="text-3xl font-black tracking-tight sm:text-5xl">Keep the classics moving.</h2></div><a href="https://github.com/vladislav-yashin/Wasm-Unleashed" class="border-b-2 border-ink pb-2 font-bold">Code, ideas, contributions ↗</a></section>
+</main>
+<footer class="wrap border-t border-white/15 py-9 text-xs leading-relaxed text-muted"><div class="flex flex-wrap justify-between gap-6"><p class="font-bold text-paper">WASM UNLEASHED</p><div class="flex flex-wrap gap-6"><a href="LICENSE">GPL-3.0-or-later</a><a href="https://github.com/vladislav-yashin/Wasm-Unleashed">Source code ↗</a><a href="https://github.com/fussraider/OpenUnleashed">Based on OpenUnleashed ↗</a><a class="hover:text-paper" href="https://nfs.place/">More NFS at nfs.place ↗</a></div></div><p class="mt-7 max-w-3xl">An independent, non-commercial community project. Not affiliated with or endorsed by Electronic Arts, Eden Games or Porsche AG. Need for Speed, Porsche and related game content and trademarks belong to their respective owners. For rights-related enquiries, <a class="underline underline-offset-4" href="https://github.com/vladislav-yashin/Wasm-Unleashed/issues">contact the project maintainers</a>.</p></footer>
+</body>
+</html>

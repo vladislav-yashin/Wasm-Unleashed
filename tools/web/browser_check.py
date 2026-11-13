@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--url', default='http://127.0.0.1:8765/')
+parser.add_argument('--url', default='http://127.0.0.1:8765/game.html')
 parser.add_argument('--output', type=Path, default=Path('target/browser-check'))
 parser.add_argument('--actions', type=Path)
 parser.add_argument('--skip-intro', action='store_true')

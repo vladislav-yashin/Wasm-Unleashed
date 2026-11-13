@@ -1,0 +1,35 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+@import "tailwindcss" source(none);
+@source "./index.html";
+@theme {
+  --color-ink: #0b0e13;
+  --color-paper: #f4f5f7;
+  --color-muted: #9ca3af;
+  --color-accent: #ffb31a;
+  --font-sans: "Arial", "Helvetica Neue", sans-serif;
+}
+@layer base {
+  html { scroll-behavior: smooth; scroll-padding-top: 6rem; }
+  body { background: radial-gradient(ellipse at 90% 10%, #ffb31a0b, transparent 40%), var(--color-ink); color: var(--color-paper); }
+  ::selection { background: var(--color-accent); color: var(--color-ink); }
+  a, summary { -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 3px solid var(--color-accent); outline-offset: 6px; }
+  summary { cursor: pointer; }
+}
+@layer components {
+  .wrap { width: min(1280px, calc(100% - 3rem)); margin-inline: auto; }
+  .eyebrow { font-size: .7rem; letter-spacing: .18em; text-transform: uppercase; font-weight: 700; }
+  .display { font-size: clamp(2.2rem, 5.1vw, 4.8rem); line-height: 1.02; letter-spacing: -.045em; font-weight: 900; }
+  .section-title { font-size: clamp(2.2rem, 4vw, 3.5rem); line-height: 1; letter-spacing: -.055em; font-weight: 800; }
+  .cta { display: inline-flex; align-items: center; justify-content: space-between; gap: 2.5rem; padding: .85rem 1.25rem; border-radius: .5rem; background: var(--color-accent); color: var(--color-ink); font-weight: 700; transition: background .2s; }
+  .cta:hover { background: #ffc34d; }
+  .hero-panel { background-image: radial-gradient(ellipse at 50% 0, #ffb31a0e, transparent 60%); }
+  .checkered { background: repeating-conic-gradient(#ffb31a66 0 25%, transparent 0 50%) 0 0 / 12px 12px; }
+  .hero-art { display: block; width: 100%; height: auto; aspect-ratio: 1942 / 809; object-fit: cover; }
+  .grid-texture { background-image: linear-gradient(#ffffff08 1px, transparent 1px), linear-gradient(90deg,#ffffff08 1px,transparent 1px); background-size: 64px 64px; }
+  details { border-top: 1px solid #ffffff26; padding-block: 1.5rem; }
+  details:last-child { border-bottom: 1px solid #ffffff26; }
+  details p { color: var(--color-muted); max-width: 48rem; padding-top: 1rem; line-height: 1.8; }
+  @media (max-width: 640px) { .wrap { width: calc(100% - 2rem); } }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+}

@@ -99,9 +99,10 @@ Wheel force feedback and network sessions are unavailable in the web version.
 The browser shell — loader, toolbar, touch labels and status messages — is translated in
 `packaging/web/i18n.mjs`. English is the default and the fallback; `ru`, `de`, `fr`, `it` and `es`
 ship alongside it. The language comes from `?lang=de`, then a saved choice in `localStorage`
-(`wasm-unleashed-locale`), then the browser's `navigator.languages`, then English. A query
+(`wasm-unleashed-locale`), then English. Browser language preferences do not
+change this default. A query
 parameter applies to that page load only; the toolbar selector stores an explicit choice.
-`index.html` keeps the English text so the page is usable before the module loads. To add a locale,
+`game.html` keeps the English text so the page is usable before the module loads. To add a locale,
 add its catalog, its `<option>` and the tests that compare key sets. Errors raised by `assets.mjs`,
 `vfs.mjs` and IndexedDB stay English inside the translated wrapper.
 
@@ -130,3 +131,65 @@ mobile memory/performance, context loss/recovery and persistent save round trips
 on real browsers with full original resources. Browser photos download the current canvas resolution.
 Future multiplayer needs a WebSocket transport and a UDP gateway; the existing
 wire protocol remains separate from browser asset delivery.
+
+
+## Landing page and SEO
+
+The root page is an English landing page. Its play links explicitly select the
+English game shell with `?lang=en&autostart=1`. This begins loading immediately
+without a second Start click; a direct `game.html` visit retains the manual Start
+button. Automatic launch does not request fullscreen without a user gesture.
+Use the in-game fullscreen toolbar button when desired. The existing game shell is available at
+`game.html` (including its `?lang=`, `?data=` and other launch parameters).
+The landing page is rendered at build time and delivered as complete HTML by
+Nginx or the local server. All headings, links and FAQ answers work without
+JavaScript; no Node server or client hydration is needed. The game is loaded
+only on the play page.
+
+Node >= 22 and npm are required to compile the pinned Tailwind CSS dependencies.
+The normal `python3 tools/web/build.py` build includes the landing page. For a
+landing-only build (no Rust compilation), run:
+
+```sh
+python3 tools/web/build_landing.py --site-url https://your-host.example/
+```
+
+Use the actual public URL, including a path prefix if hosted in a subdirectory.
+`--site-url` (or `SITE_URL`) adds the canonical URL, Open Graph URL and
+`sitemap.xml`; without a public URL these are deliberately omitted. A rebuild
+without the URL removes any old sitemap. `robots.txt`, descriptive metadata and
+SoftwareApplication structured data are emitted, and the play shell is marked
+`noindex`. Submit the generated sitemap to the search engines after deployment.
+Do not use the example hostname in production.
+
+`packaging/web/landing.css` is the Tailwind entry point; `index.html` is its
+explicit content source. CSS is compiled and served locally, without a CDN or
+runtime CSS generator. The hero uses original generated Porsche 993 artwork, optimized as WebP; the
+favicon is an original SVG. Neither asset was extracted from the game or copied
+from the reference site. See `packaging/web/artwork.md` for the artwork prompt.
+The landing is a player-facing entry point for a configured, ready-to-play host;
+self-hosting and data preparation instructions remain in the documentation.
+
+The landing source is GPL-3.0-or-later. The distribution includes `LICENSE` and
+`THIRD-PARTY-NOTICES.txt` with Tailwind's MIT notice. When distributing the game
+binary, provide the complete corresponding source for that exact build under
+GPL, including local modifications and build instructions; a link to a different
+upstream revision is insufficient. Original game assets are separate and are not
+covered by the engine's GPL license.
+
+
+### Loading screen
+
+The non-commercial project landing lists keyboard, touch and standard browser
+Gamepad API controller support. Gamepads require a button press or stick movement
+before the browser exposes them; device/browser compatibility varies.
+
+The play screen reuses the landing artwork and palette, with separate connection,
+resource preparation and engine startup stages. Resource progress counts prepared
+files, not downloaded bytes; connection and engine startup remain indeterminate.
+The overlay stays up until the engine reports an intro, menu or race state.
+Loading errors expose Retry or Reload and optional technical details. Track
+preparation uses a compact panel over the game with only a status and percentage;
+it keeps Retry and optional technical details on failure without discarding the
+active game. The artwork, branding and startup steps appear only at first launch.
+All loading UI strings are included in the six existing shell locales.

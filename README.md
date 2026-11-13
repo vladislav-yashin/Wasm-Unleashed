@@ -56,3 +56,9 @@ who contributed to the original implementation.
 
 The community patch 1.0.6 by Verok, whose run-time fixes to the original executable this engine reproduces
 where they change the game's behaviour.
+
+
+The web build serves a search-indexable landing page at `/` and the game at
+`game.html`. Tailwind CSS is compiled locally. Pass the actual public URL with
+`python3 tools/web/build.py --site-url https://your-host.example/` to generate
+canonical metadata and a sitemap. See [landing page and SEO](packaging/web/README.md#landing-page-and-seo).

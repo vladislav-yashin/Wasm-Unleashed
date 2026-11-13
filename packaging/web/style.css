@@ -40,3 +40,34 @@
 }
 @media(max-width:740px){#touch .race-actions{bottom:calc(var(--bottom) + var(--control) + 8px)}}
 #render-size{font-size:.7rem;opacity:.75;font-variant-numeric:tabular-nums;min-width:4.5rem;text-align:right}
+
+/* The loading shell stays independent of the game's canvas and input layouts. */
+#loader{box-sizing:border-box;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right));overflow:auto;background:radial-gradient(ellipse at top,#ffb31a12,transparent 60%),#0b0e13;color:#f4f5f7}
+.loading-card{box-sizing:border-box;display:grid;grid-template-columns:1fr 1.1fr;width:min(100%,1040px);margin:auto;border:1px solid #ffffff1a;border-radius:20px;overflow:hidden;background:#10141b;box-shadow:0 30px 100px #0006}
+.loading-art{min-height:540px;background:linear-gradient(0deg,#10141b44,#10141b11),url('porsche-993-alpine.webp') 66% center/cover}
+.loading-content{padding:clamp(24px,4vw,48px);min-width:0}
+.loading-brand{display:flex;align-items:center;gap:12px;color:#f4f5f7;text-decoration:none;font-size:12px;font-weight:800;letter-spacing:.04em}.loading-brand>span{background:#ffb31a;color:#0b0e13;font-size:20px;font-style:italic;letter-spacing:-.06em;padding:6px 9px;border-radius:5px}
+.loading-eyebrow{margin:36px 0 12px;color:#ffb31a;font-size:10px;letter-spacing:.2em;text-transform:uppercase;font-weight:700}
+#loading-title{font-size:clamp(28px,4vw,42px);line-height:1.05;letter-spacing:-.045em;margin:0 0 18px}
+#status{max-width:none;min-height:3em;font-size:14px;line-height:1.6;color:#b0b6c1;margin:0 0 24px}
+.loading-steps{display:flex;list-style:none;gap:8px;padding:0;margin:0 0 24px}.loading-steps li{display:flex;align-items:center;gap:8px;flex:1;color:#737d8b;font-size:12px}.loading-steps li>span:first-child{display:grid;place-items:center;border:1px solid #ffffff26;border-radius:50%;width:27px;height:27px;font-size:10px;flex-shrink:0}.loading-steps li[aria-current="step"]{color:#ffb31a}.loading-steps li[aria-current="step"]>span:first-child{border-color:#ffb31a;background:#ffb31a15}.loading-steps li[data-complete="true"]{color:#d6dccb}
+.loading-progress-heading{display:flex;justify-content:space-between;gap:12px;min-height:18px;margin-bottom:8px;font-size:11px;font-variant-numeric:tabular-nums;color:#9ca3af}
+#progress{display:block;appearance:none;-webkit-appearance:none;box-sizing:border-box;border:0;border-radius:999px;overflow:hidden;width:100%;height:5px;background:#ffffff12;color:#ffb31a;accent-color:#ffb31a}#progress::-webkit-progress-bar{background:#ffffff12}#progress::-webkit-progress-value{background:#ffb31a}#progress::-moz-progress-bar{background:#ffb31a}#progress:indeterminate{background:linear-gradient(90deg,#ffffff12 15%,#ffb31a 50%,#ffffff12 85%);background-size:200% 100%;animation:loading-sweep 1.8s linear infinite}#progress:indeterminate::-moz-progress-bar{background:transparent}#progress:indeterminate::-webkit-progress-bar{background:transparent}
+.loading-hint{font-size:12px;line-height:1.7;color:#9ca3af;margin:22px 0}.loading-actions{display:flex;align-items:center;flex-wrap:wrap;gap:20px}.loading-actions a{font-size:12px;color:#9ca3af;text-underline-offset:4px}#start{border:0;border-radius:7px;padding:12px 24px;background:#ffb31a;color:#0b0e13;font-size:14px;font-weight:700}#start:hover{background:#ffc34d}#start[hidden]{display:none}#loader a:focus-visible,#start:focus-visible,#loading-details summary:focus-visible{outline:2px solid #ffb31a;outline-offset:5px}
+#loading-details{margin-top:24px;font-size:12px;color:#9ca3af}#loading-details summary{cursor:pointer}#loading-error{white-space:pre-wrap;overflow-wrap:anywhere;max-height:120px;overflow:auto;font-size:11px;line-height:1.6;color:#f1b5a5}#loader[data-state="error"] #status{color:#f1b5a5}#loader[data-state="loading"]{cursor:progress}
+@keyframes loading-sweep{from{background-position:200% 0}to{background-position:0 0}}
+@media(max-width:700px){.loading-card{grid-template-columns:1fr;max-width:460px}.loading-art{min-height:0;height:160px;background-position:center 62%}.loading-eyebrow{margin-top:24px}#loader{justify-content:flex-start}.loading-content{padding:24px}.loading-steps{gap:5px}.loading-steps li{font-size:11px;gap:5px}}
+@media(max-height:620px) and (min-width:701px){.loading-art{min-height:0}.loading-content{padding:24px}.loading-eyebrow{margin-top:20px}#status{margin-bottom:14px}.loading-steps{margin-bottom:14px}.loading-hint{margin:14px 0}}
+@media(prefers-reduced-motion:reduce){#progress:indeterminate{animation:none}}
+
+/* In-session preparation is a small progress panel; keep the game visible. */
+#loader[data-presentation="compact"]{background:#0003}
+#loader[data-presentation="compact"] .loading-card{display:block;width:min(100%,400px);margin:auto auto max(12px,env(safe-area-inset-bottom));border-radius:12px;box-shadow:0 8px 32px #0005}
+#loader[data-presentation="compact"] .loading-content{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:16px;padding:18px 20px}
+#loader[data-presentation="compact"] :is(.loading-art,.loading-brand,.loading-eyebrow,#loading-title,.loading-steps,.loading-hint,#loading-count,.loading-actions a){display:none}
+#loader[data-presentation="compact"] #status{grid-column:1;grid-row:1;min-height:0;margin:0;font-size:13px;line-height:1.5}
+#loader[data-presentation="compact"] .loading-progress-heading{grid-column:2;grid-row:1;min-height:0;margin:0}
+#loader[data-presentation="compact"] #progress{grid-column:1/-1;grid-row:2;margin-top:12px;height:4px}
+#loader[data-presentation="compact"] .loading-actions{grid-column:1/-1;margin-top:14px}
+#loader[data-presentation="compact"][data-state="loading"] .loading-actions{display:none}
+#loader[data-presentation="compact"] #loading-details{grid-column:1/-1;margin-top:14px}

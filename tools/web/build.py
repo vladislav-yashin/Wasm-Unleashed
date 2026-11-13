@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """Build the browser distribution. Requires Rust WASM target and matching wasm-bindgen CLI."""
 import argparse
+import os
 from pathlib import Path
 import shutil
 import subprocess
 import tomllib
 
+from build_landing import build as build_landing
+
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--debug', action='store_true')
+parser.add_argument('--site-url', default=os.environ.get('SITE_URL'), help='Public base URL for canonical and sitemap')
 parser.add_argument('--wasm-bindgen', default='wasm-bindgen')
 parser.add_argument('--toolchain', default='stable')
 args = parser.parse_args()
@@ -23,7 +27,8 @@ if not args.debug:
 subprocess.run(command, cwd=root, check=True)
 output = root / 'dist'
 output.mkdir(exist_ok=True)
-for name in ['index.html', 'smoke.html', 'style.css', 'bootstrap.mjs', 'controls.mjs', 'fullscreen.mjs', 'render-scale.mjs', 'assets.mjs', 'vfs.mjs', 'i18n.mjs']:
+build_landing(output, args.site_url)
+for name in ['smoke.html', 'style.css', 'bootstrap.mjs', 'controls.mjs', 'fullscreen.mjs', 'render-scale.mjs', 'assets.mjs', 'vfs.mjs', 'i18n.mjs']:
     shutil.copyfile(root / 'packaging/web' / name, output / name)
 subprocess.run([args.wasm_bindgen, '--target', 'web', '--out-dir', str(output / 'pkg'),
                 '--out-name', 'open_unleashed', str(root / 'target/wasm32-unknown-unknown' / ('debug' if args.debug else 'release') / 'open-unleashed.wasm')], check=True)

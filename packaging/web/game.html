@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Play — Wasm Unleashed</title>
+<meta name="robots" content="noindex,follow">
+<link rel="stylesheet" href="style.css">
+<body>
+<section id="loader" aria-labelledby="loading-title" data-state="ready">
+<div class="loading-card">
+<div class="loading-art" aria-hidden="true"></div>
+<div class="loading-content">
+<a class="loading-brand" href="./" aria-label="Wasm Unleashed home"><span>W/U</span> WASM UNLEASHED</a>
+<p class="loading-eyebrow" data-i18n="loader.edition">Browser edition</p>
+<h1 id="loading-title" data-i18n="loader.title">Your next drive awaits.</h1>
+<p id="status" role="status" data-i18n="status.ready">Ready to load the game</p>
+<ol class="loading-steps" aria-label="Loading stages" data-i18n-aria-label="loader.stages">
+<li data-step="connect"><span>01</span><span data-i18n="loader.connect">Connect</span></li>
+<li data-step="resources"><span>02</span><span data-i18n="loader.resources">Prepare</span></li>
+<li data-step="engine"><span>03</span><span data-i18n="loader.engine">Drive</span></li>
+</ol>
+<div class="loading-progress-heading" aria-hidden="true"><span id="loading-count"></span><span id="loading-percent"></span></div>
+<progress id="progress" value="0" max="1" aria-label="Loading progress" data-i18n-aria-label="loader.progress"></progress>
+<p class="loading-hint" data-i18n="loader.hint">Keyboard, touch or controller. Your progress stays in this browser.</p>
+<div class="loading-actions"><button id="start" data-i18n="action.start">Start</button><a href="./" data-i18n="loader.back">Back to the game page</a></div>
+<details id="loading-details" hidden><summary data-i18n="loader.details">Technical details</summary><pre id="loading-error"></pre></details>
+<noscript><p>JavaScript is required to run the game. Enable it and reload this page.</p></noscript>
+</div>
+</div>
+</section>
+<button id="tools-toggle" aria-label="Game controls" data-i18n-aria-label="toolbar.controls" aria-expanded="false" aria-controls="tools">☰</button>
+<nav id="tools" aria-label="Game controls" data-i18n-aria-label="toolbar.controls">
+<button id="fullscreen" title="Toggle fullscreen" aria-label="Toggle fullscreen" data-i18n-title="toolbar.fullscreen" data-i18n-aria-label="toolbar.fullscreen">⛶</button>
+<button id="export" data-i18n="toolbar.export">Export saves</button>
+<label class="button"><span data-i18n="toolbar.import">Import</span><input id="import" type="file" accept="application/json"></label>
+<select id="language" aria-label="Language" data-i18n-aria-label="toolbar.language">
+<option value="en">English</option>
+<option value="ru">Русский</option>
+<option value="de">Deutsch</option>
+<option value="fr">Français</option>
+<option value="it">Italiano</option>
+<option value="es">Español</option>
+</select>
+<select id="render-scale" aria-label="Render scale" data-i18n-aria-label="toolbar.renderScale" title="Lower the canvas resolution for more frame rate" data-i18n-title="toolbar.renderScaleHint">
+<option value="1">100%</option>
+<option value="0.75">75%</option>
+<option value="0.5">50%</option>
+<option value="0.4">40%</option>
+</select>
+<span id="render-size" aria-hidden="true"></span>
+<span id="save-status" role="status"></span>
+</nav>
+<div id="touch" aria-label="Touch controls" data-i18n-aria-label="toolbar.touch">
+<div class="race-controls steering" data-slide-group="steer">
+<button data-code="ArrowLeft" aria-label="Steer left" data-i18n-aria-label="touch.steerLeft"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M17 4 5 12l12 8Z"/></svg></button>
+<button data-code="ArrowRight" aria-label="Steer right" data-i18n-aria-label="touch.steerRight"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m7 4 12 8-12 8Z"/></svg></button>
+</div>
+<div class="race-controls race-actions">
+<button data-code="KeyP" data-i18n="touch.pause">Pause</button>
+<button data-code="KeyC" data-i18n="touch.camera">Camera</button>
+<button data-code="KeyA" aria-label="Shift up" data-i18n-aria-label="touch.shiftUp">+</button>
+<button data-code="KeyZ" aria-label="Shift down" data-i18n-aria-label="touch.shiftDown">−</button>
+</div>
+<div class="race-controls pedals" data-slide-group="pedals">
+<button data-code="Space" data-i18n="touch.handbrake">Handbrake</button>
+<button data-code="ArrowDown" data-i18n="touch.brake">Brake</button>
+<button data-code="ArrowUp" data-i18n="touch.throttle">Throttle</button>
+</div>
+<div class="menu-controls menu-arrows">
+<button data-code="ArrowUp" aria-label="Up" data-i18n-aria-label="touch.up"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m4 17 8-12 8 12Z"/></svg></button>
+<button data-code="ArrowLeft" aria-label="Left" data-i18n-aria-label="touch.left"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M17 4 5 12l12 8Z"/></svg></button>
+<button data-code="ArrowDown" aria-label="Down" data-i18n-aria-label="touch.down"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m4 7 8 12 8-12Z"/></svg></button>
+<button data-code="ArrowRight" aria-label="Right" data-i18n-aria-label="touch.right"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m7 4 12 8-12 8Z"/></svg></button>
+</div>
+<div class="menu-controls menu-actions">
+<button data-code="Escape" data-i18n="touch.back">Back</button><button data-code="Enter" data-i18n="touch.ok">OK</button>
+</div>
+</div>
+<input id="text-input" hidden aria-label="Profile name" data-i18n-aria-label="input.profileName" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done">
+<script type="module" src="bootstrap.mjs"></script>
+</body></html>

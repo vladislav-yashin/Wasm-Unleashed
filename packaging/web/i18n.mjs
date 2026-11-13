@@ -4,7 +4,7 @@
  * so changing this locale never retranslates the front end, HUD or subtitles.
  *
  * English is the default and the fallback. To add a locale, add its catalog here, its option in
- * `index.html` and the locale to the tests; `test_*.mjs` checks that every catalog has the same
+ * `game.html` and the locale to the tests; `test_*.mjs` checks that every catalog has the same
  * keys and that every `data-i18n` key used by the page exists.
  */
 export const FALLBACK_LOCALE = 'en';
@@ -12,6 +12,21 @@ const STORAGE_KEY = 'wasm-unleashed-locale';
 
 export const CATALOG = {
   en: {
+    "loader.edition": "Browser edition",
+    "loader.title": "Your next drive awaits.",
+    "loader.stages": "Loading stages",
+    "loader.connect": "Connect",
+    "loader.resources": "Prepare",
+    "loader.engine": "Drive",
+    "loader.progress": "Loading progress",
+    "loader.hint": "Keyboard, touch or controller. Your progress stays in this browser.",
+    "loader.back": "Back to the game page",
+    "loader.details": "Technical details",
+    "loading.connecting": "Connecting to the game…",
+    "loading.engine": "Starting the engine and preparing graphics…",
+    "loading.track": "Preparing your next track…",
+    "loading.failed": "We couldn’t finish loading. Please try again.",
+    "loading.prepared": "{done} / {total} files prepared",
     'touch.shiftUp': 'Shift up',
     'touch.shiftDown': 'Shift down',
     'touch.up': 'Up',
@@ -52,6 +67,21 @@ export const CATALOG = {
     'error.contextLost': 'Graphics context lost. Reload the game to restore the saved profile.',
   },
   ru: {
+    "loader.edition": "Браузерная версия",
+    "loader.title": "Ваша следующая гонка ждёт.",
+    "loader.stages": "Этапы загрузки",
+    "loader.connect": "Связь",
+    "loader.resources": "Ресурсы",
+    "loader.engine": "Старт",
+    "loader.progress": "Прогресс загрузки",
+    "loader.hint": "Клавиатура, сенсорное управление или геймпад. Прогресс хранится в этом браузере.",
+    "loader.back": "Вернуться на главную",
+    "loader.details": "Технические подробности",
+    "loading.connecting": "Подключение к игре…",
+    "loading.engine": "Запуск движка и подготовка графики…",
+    "loading.track": "Подготовка следующей трассы…",
+    "loading.failed": "Не удалось завершить загрузку. Попробуйте ещё раз.",
+    "loading.prepared": "Подготовлено файлов: {done} / {total}",
     'touch.shiftUp': 'Передача вверх',
     'touch.shiftDown': 'Передача вниз',
     'touch.up': 'Вверх',
@@ -92,6 +122,21 @@ export const CATALOG = {
     'error.contextLost': 'Графический контекст потерян. Перезагрузите игру, чтобы восстановить сохранённый профиль.',
   },
   de: {
+    "loader.edition": "Browser-Version",
+    "loader.title": "Deine nächste Fahrt wartet.",
+    "loader.stages": "Ladeschritte",
+    "loader.connect": "Verbinden",
+    "loader.resources": "Vorbereiten",
+    "loader.engine": "Fahren",
+    "loader.progress": "Ladefortschritt",
+    "loader.hint": "Tastatur, Touch oder Controller. Dein Fortschritt bleibt in diesem Browser.",
+    "loader.back": "Zurück zur Spielseite",
+    "loader.details": "Technische Details",
+    "loading.connecting": "Verbindung zum Spiel wird hergestellt…",
+    "loading.engine": "Engine und Grafik werden gestartet…",
+    "loading.track": "Die nächste Strecke wird vorbereitet…",
+    "loading.failed": "Laden fehlgeschlagen. Bitte versuche es erneut.",
+    "loading.prepared": "{done} / {total} Dateien vorbereitet",
     'touch.shiftUp': 'Hochschalten',
     'touch.shiftDown': 'Herunterschalten',
     'touch.up': 'Nach oben',
@@ -132,6 +177,21 @@ export const CATALOG = {
     'error.contextLost': 'Grafikkontext verloren. Laden Sie das Spiel neu, um das gespeicherte Profil wiederherzustellen.',
   },
   fr: {
+    "loader.edition": "Version navigateur",
+    "loader.title": "La route vous attend.",
+    "loader.stages": "Étapes du chargement",
+    "loader.connect": "Connexion",
+    "loader.resources": "Préparation",
+    "loader.engine": "Départ",
+    "loader.progress": "Progression du chargement",
+    "loader.hint": "Clavier, commandes tactiles ou manette. Votre progression reste dans ce navigateur.",
+    "loader.back": "Retour à la page du jeu",
+    "loader.details": "Détails techniques",
+    "loading.connecting": "Connexion au jeu…",
+    "loading.engine": "Démarrage du moteur et préparation des graphismes…",
+    "loading.track": "Préparation du prochain circuit…",
+    "loading.failed": "Le chargement a échoué. Veuillez réessayer.",
+    "loading.prepared": "{done} / {total} fichiers préparés",
     'touch.shiftUp': 'Monter un rapport',
     'touch.shiftDown': 'Descendre un rapport',
     'touch.up': 'Haut',
@@ -172,6 +232,21 @@ export const CATALOG = {
     'error.contextLost': 'Contexte graphique perdu. Rechargez le jeu pour restaurer le profil enregistré.',
   },
   it: {
+    "loader.edition": "Versione browser",
+    "loader.title": "La tua prossima corsa ti aspetta.",
+    "loader.stages": "Fasi di caricamento",
+    "loader.connect": "Connetti",
+    "loader.resources": "Prepara",
+    "loader.engine": "Guida",
+    "loader.progress": "Avanzamento del caricamento",
+    "loader.hint": "Tastiera, touch o controller. I progressi restano in questo browser.",
+    "loader.back": "Torna alla pagina del gioco",
+    "loader.details": "Dettagli tecnici",
+    "loading.connecting": "Connessione al gioco…",
+    "loading.engine": "Avvio del motore e preparazione della grafica…",
+    "loading.track": "Preparazione del prossimo circuito…",
+    "loading.failed": "Caricamento non riuscito. Riprova.",
+    "loading.prepared": "{done} / {total} file preparati",
     'touch.shiftUp': 'Marcia superiore',
     'touch.shiftDown': 'Marcia inferiore',
     'touch.up': 'Su',
@@ -212,6 +287,21 @@ export const CATALOG = {
     'error.contextLost': 'Contesto grafico perso. Ricarica il gioco per ripristinare il profilo salvato.',
   },
   es: {
+    "loader.edition": "Versión para navegador",
+    "loader.title": "Tu próxima carrera te espera.",
+    "loader.stages": "Etapas de carga",
+    "loader.connect": "Conectar",
+    "loader.resources": "Preparar",
+    "loader.engine": "Conducir",
+    "loader.progress": "Progreso de carga",
+    "loader.hint": "Teclado, controles táctiles o mando. Tu progreso se guarda en este navegador.",
+    "loader.back": "Volver a la página del juego",
+    "loader.details": "Detalles técnicos",
+    "loading.connecting": "Conectando con el juego…",
+    "loading.engine": "Iniciando el motor y preparando los gráficos…",
+    "loading.track": "Preparando el próximo circuito…",
+    "loading.failed": "No se pudo completar la carga. Inténtalo de nuevo.",
+    "loading.prepared": "{done} / {total} archivos preparados",
     'touch.shiftUp': 'Subir marcha',
     'touch.shiftDown': 'Bajar marcha',
     'touch.up': 'Arriba',
@@ -272,13 +362,13 @@ export function normalizeLocale(tag) {
 }
 
 /**
- * Locale precedence: `?lang=`, then the saved choice, then the browser's languages, then English.
+ * Locale precedence: `?lang=`, then the saved choice, then English.
+ * Browser language preferences do not change the default game shell language.
  * A query parameter applies to that page load only and is not saved.
  */
-export function detectLocale({ search = globalThis.location?.search ?? '', languages = globalThis.navigator?.languages ?? [], stored = storedLocale() } = {}) {
+export function detectLocale({ search = globalThis.location?.search ?? '', stored = storedLocale() } = {}) {
   const query = new URLSearchParams(search).get('lang');
-  return normalizeLocale(query) ?? normalizeLocale(stored)
-    ?? languages.map(normalizeLocale).find(Boolean) ?? FALLBACK_LOCALE;
+  return normalizeLocale(query) ?? normalizeLocale(stored) ?? FALLBACK_LOCALE;
 }
 
 export function getLocale() { return current; }
