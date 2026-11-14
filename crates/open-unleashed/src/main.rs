@@ -485,7 +485,11 @@ fn run() -> Result<()> {
         &paths.root,
     ));
     let track_tables = nfs_game::track_list::TrackListTables::load(&paths);
-    let (track_all, track_looped) = track_tables.build(nfs_game::track_list::START_YEAR, 0);
+    let unlock_all = career.as_ref().is_some_and(|ui| ui.career.unlock_all);
+    let initial_year = career.as_ref().map_or(nfs_game::track_list::START_YEAR, |ui| {
+        if unlock_all { nfs_game::career::YEAR_TABLE.last().copied().unwrap_or(2000) as i32 } else { ui.career.year as i32 }
+    });
+    let (track_all, track_looped) = track_tables.build(initial_year, 0);
     let menu = if use_menu {
         // `GenericCar.Car`'s own list, `[0x6919EC]`, is rebuilt by `0x4F3E40` (kind-0 records only
         // — `record+0x1F4 == 0`, 0x4F400E…0x4F4087, `nfs-formats/src/fedata.rs`'s own `kind` field,
@@ -503,11 +507,11 @@ fn run() -> Result<()> {
         // `+0x204` test at all, so every kind-0 record showed regardless of `Game.GameType` — see
         // [`dealer_flag_admitted`]'s doc for the two arms and the live original check that settled
         // them; `Game.GameType` is 0 (QuickRace) at start-up, `controls.md`:9519.)*
-        let cars = generic_car_list(&catalog, 0);
+        let cars = generic_car_list(&catalog, 0, unlock_all);
         // `GenericCar2.Car`'s own list `[0x6919F4]` is a **separate** rebuild, not `cars` again —
         // see `FeCatalogues::cars2`'s field doc and `FeCatalogues::set_cars2`. Built here for the same chronicle
-        // year `tracks_year` below starts at (`nfs_game::track_list::START_YEAR`).
-        let mut cars2: Vec<_> = catalog.iter().filter(|c| c.kind == 0 && c.year as i32 <= nfs_game::track_list::START_YEAR).cloned().collect();
+        // year `tracks_year` below starts at (the loaded profile's, or `START_YEAR`).
+        let mut cars2: Vec<_> = catalog.iter().filter(|c| c.kind == 0 && c.year as i32 <= initial_year && (!unlock_all || c.dealer_flag_204 != 3)).cloned().collect();
         era_class_year_sort(&mut cars2, era_class_year_key);
         // **`0x4FC730`** ("reset track list") zeroes `zMergedList.Car`'s catalogue-half index —
         // among the seven `Track<i>` rows, `Knockout.TrackNumber` and `LoopedTrack.Track` it also
@@ -541,7 +545,7 @@ fn run() -> Result<()> {
             // the chronicle year's initial value `[0x5DB764]` = 0x79E and `Game.GameType` 0
             tracks: track_all,
             looped: track_looped,
-            tracks_year: nfs_game::track_list::START_YEAR,
+            tracks_year: initial_year,
             cars,
             cars2,
             track_idx: 0,

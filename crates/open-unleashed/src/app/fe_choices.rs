@@ -254,9 +254,7 @@ impl App {
                 let mut rows: Vec<ListRow> = Vec::new();
                 self.garage_rows(&mut rows, short, usize::MAX);
                 let a = rows.len();
-                rows.extend(m.cars.iter().map(|c| {
-                    ListRow::Text(if short { c.family.to_string() } else { c.display_name.to_string() })
-                }));
+                rows.extend(m.cars.iter().map(|c| ListRow::Text(self.car_label(c, short))));
                 // **the current row, either half.** `slot10()`'s own field is `car_garage`
                 // (0x4F4DF0, above): below `A.count` it is the garage's own row — `garage_rows`
                 // over the same `select` finds it — otherwise `A.count + car_idx` into the
@@ -323,17 +321,11 @@ impl App {
             }
             // one row, the era's prize car (`App::prize_car`)
             "PrizeCars.Car" if let Some(car) = self.prize_car() => {
-                Some((vec![ListRow::Text(if modifier == "SHORT" { car.family.to_string() } else { car.display_name.to_string() })], Some(0)))
+                Some((vec![ListRow::Text(self.car_label(car, modifier == "SHORT"))], Some(0)))
             }
             "GenericCar.Car" => Some(self.catalog_rows(m.cars.iter(), modifier == "SHORT", Some(m.car_idx))),
             "PrizeCars.Car" | "CARSETTINGS.CAR" => {
-                let rows = m
-                    .cars
-                    .iter()
-                    .map(|c| {
-                        ListRow::Text(if modifier == "SHORT" { c.family.to_string() } else { c.display_name.to_string() })
-                    })
-                    .collect();
+                let rows = m.cars.iter().map(|c| ListRow::Text(self.car_label(c, modifier == "SHORT"))).collect();
                 Some((rows, Some(m.car_idx)))
             }
             // `GenericCar2.Car`'s own list `cars2` — `[0x6919F4]`, separate from `cars` above

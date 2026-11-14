@@ -338,7 +338,7 @@ impl App {
                 .unwrap_or(0),
             player_name: nfs_game::save::read_player_lst(&nfs_game::save::save_dir())
                 .and_then(|s| nfs_game::save::Profile::from_stem(&s))
-                .map(|p| p.name)
+                .map(|p| p.display_name())
                 .unwrap_or_else(|| "DRIVER".to_string()),
             hud_records: None,
             records_spoken: false,

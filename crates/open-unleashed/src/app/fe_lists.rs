@@ -235,6 +235,18 @@ impl App {
         }
     }
 
+    /// A car's row/accessor text. Only the `UnlockAll` profile can reach the Factory Driver prize
+    /// records (`dealer_flag_204 == 3`), whose display names duplicate ordinary cars; the short
+    /// `(Bonus)` suffix keeps the two rows apart without overflowing the list row.
+    pub(crate) fn car_label(&self, e: &nfs_formats::fedata::CarCatalogEntry, short: bool) -> String {
+        let base = if short { e.family.as_str() } else { e.display_name.as_str() };
+        if e.dealer_flag_204 == 3 && self.career.as_ref().is_some_and(|c| c.career.unlock_all) {
+            format!("{base} (Bonus)")
+        } else {
+            base.to_string()
+        }
+    }
+
     /// The garage half of a car list, with `FEOwnedCarAccessor`'s headings — §4.144. Pushes a
     /// `GroupHeading` for the era **and** the class when the era changes, one for the class when
     /// only the class does, then the car's own row; returns the row index of `select`.
@@ -260,7 +272,7 @@ impl App {
             if i == select {
                 at = Some(rows.len());
             }
-            rows.push(ListRow::Text(if short { e.family.to_string() } else { e.display_name.to_string() }));
+            rows.push(ListRow::Text(self.car_label(e, short)));
         }
         at
     }
@@ -304,7 +316,7 @@ impl App {
             if Some(i) == select {
                 at = Some(rows.len());
             }
-            rows.push(ListRow::Text(if short { e.family.to_string() } else { e.display_name.to_string() }));
+            rows.push(ListRow::Text(self.car_label(e, short)));
         }
         (rows, at)
     }
@@ -416,8 +428,16 @@ pub(crate) fn selectable_index(rows: &[ListRow], row: usize) -> i32 {
 /// that superficially reads the same at a glance ("356", the earliest era) but is not what the
 /// original's own screenshot names. This supersedes that reading; `b5f1896e`'s fix to the *sort
 /// itself* (era/class/year, exchange, not `Vec::sort_by_key(year)`) and to `reset_track_rows`
-/// resetting `car_idx` on every `SETTYPE*` both still stand, unchanged.
-fn dealer_flag_admitted(flag: u16, game_type: u8) -> bool {
+/// resetting `car_idx` on every `SETTYPE*` both still stand, unchanged. The port's `UnlockAll`
+/// profile bypasses both arms and admits every record, including flag 3's Factory Driver prizes
+/// (their display names duplicate ordinary cars, but their models and paint sets are their own).
+fn dealer_flag_admitted(flag: u16, game_type: u8, unlock_all: bool) -> bool {
+    // `UnlockAll`: every kind-0 record, bonus and Factory Driver prize cars included. The latter
+    // share a display name with a normal record, but carry their own models (`F901`, `FBoxster`,
+    // `F996`) and paint sets, so they are real content rather than duplicates to hide.
+    if unlock_all {
+        return true;
+    }
     if game_type == game_type::TOURNAMENT {
         flag != 2
     } else {
@@ -432,9 +452,9 @@ fn dealer_flag_admitted(flag: u16, game_type: u8) -> bool {
 /// `GenericCar.Car`'s own list, `[0x6919EC]` — kind-0 records the current `Game.GameType` admits
 /// ([`dealer_flag_admitted`]), 0x4F0F50-sorted. Shared by [`FeCatalogues::set_cars`] and the initial
 /// `FeCatalogues` construction, which needs the filtered/sorted vector before a `FeCatalogues` exists yet (to
-/// resolve `NFS_FE_CAR`'s starting index).
-pub(crate) fn generic_car_list(catalog: &[nfs_formats::fedata::CarCatalogEntry], game_type: u8) -> Vec<nfs_formats::fedata::CarCatalogEntry> {
-    let mut v: Vec<_> = catalog.iter().filter(|c| c.kind == 0 && dealer_flag_admitted(c.dealer_flag_204, game_type)).cloned().collect();
+/// resolve `NFS_FE_CAR`'s starting index). `unlock_all` is the `UnlockAll` profile's port-only switch.
+pub(crate) fn generic_car_list(catalog: &[nfs_formats::fedata::CarCatalogEntry], game_type: u8, unlock_all: bool) -> Vec<nfs_formats::fedata::CarCatalogEntry> {
+    let mut v: Vec<_> = catalog.iter().filter(|c| c.kind == 0 && dealer_flag_admitted(c.dealer_flag_204, game_type, unlock_all)).cloned().collect();
     era_class_year_sort(&mut v, era_class_year_key);
     v
 }
@@ -558,11 +578,16 @@ mod dealer_flag_tests {
     /// duplicates) never passes this arm at all.
     #[test]
     fn the_two_arms_by_flag() {
-        assert_eq!([0, 1, 2, 3].map(|f| dealer_flag_admitted(f, 4)), [true, true, false, true], "career");
-        assert_eq!([0, 1, 2, 3].map(|f| dealer_flag_admitted(f, 0)), [true, false, true, false], "quick race");
-        assert_eq!([0, 1, 2, 3].map(|f| dealer_flag_admitted(f, 1)), [true, false, true, false], "quick knockout");
-        assert_eq!([0, 1, 2, 3].map(|f| dealer_flag_admitted(f, 2)), [true, false, true, false], "knockout");
-        assert_eq!([0, 1, 2, 3].map(|f| dealer_flag_admitted(f, 3)), [true, true, true, false], "multiplayer");
+        assert_eq!([0, 1, 2, 3].map(|f| dealer_flag_admitted(f, 4, false)), [true, true, false, true], "career");
+        assert_eq!([0, 1, 2, 3].map(|f| dealer_flag_admitted(f, 0, false)), [true, false, true, false], "quick race");
+        assert_eq!([0, 1, 2, 3].map(|f| dealer_flag_admitted(f, 1, false)), [true, false, true, false], "quick knockout");
+        assert_eq!([0, 1, 2, 3].map(|f| dealer_flag_admitted(f, 2, false)), [true, false, true, false], "knockout");
+        assert_eq!([0, 1, 2, 3].map(|f| dealer_flag_admitted(f, 3, false)), [true, true, true, false], "multiplayer");
+        // UnlockAll ignores the game type and admits every car, bonus and Factory Driver prize
+        // records included
+        for game_type in [0, 1, 2, 3, 4] {
+            assert_eq!([0, 1, 2, 3].map(|f| dealer_flag_admitted(f, game_type, true)), [true, true, true, true], "UnlockAll {game_type}");
+        }
     }
 
     /// Against the shipped `nfs5.car`: QuickRace's filtered, sorted catalogue's row 0 is `'59 356 A
@@ -576,13 +601,22 @@ mod dealer_flag_tests {
         let Ok(paths) = GamePaths::locate() else { return };
         let Ok(bytes) = nfs_platform::fs::read(paths.fe_data().join("Data").join("nfs5.car")) else { return };
         let Ok(catalog) = nfs_formats::fedata::parse_car_catalog(&bytes) else { return };
-        let cars = generic_car_list(&catalog, 0);
+        let cars = generic_car_list(&catalog, 0, false);
         assert_eq!(cars.len(), 15);
         assert_eq!(cars[0].display_name, "'59 356 A 1600 Super Convertible D");
         // the three shipped display-name duplicates (a flag-0/1 racing car and its flag-3 Factory
         // Driver twin) never both show through this arm — at most one of each pair survives
         for name in ["'73 911 Carrera RS 2.7 Coupe", "'97 Boxster", "'00 911 Turbo (996)"] {
             assert!(cars.iter().filter(|c| c.display_name == name).count() <= 1, "{name}");
+        }
+        // UnlockAll adds the flag-1 racing records, the bonus cars and the flag-3 Factory Driver
+        // stage prizes (221/222/223), which are only awarded in career but carry their own paint
+        let all = generic_car_list(&catalog, 0, true);
+        let want = catalog.iter().filter(|c| c.kind == 0).count();
+        assert_eq!(all.len(), want);
+        assert!(all.len() > cars.len(), "UnlockAll must widen the QuickRace list");
+        for id in [221, 222, 223] {
+            assert!(all.iter().any(|c| c.id == id && c.dealer_flag_204 == 3), "Factory Driver prize {id} is missing");
         }
     }
 }

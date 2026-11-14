@@ -248,10 +248,27 @@ impl CareerUi {
         // The profile is the one `player.lst` last selected, as `RebuildUserList` 0x4DEF60 does.
         let profile = std::env::var("NFS5_PROFILE")
             .ok()
-            .map(|n| Profile::new(n, nfs_game::save::DEFAULT_PICTURE))
+            .map(|n| {
+                let picture = if n.eq_ignore_ascii_case(nfs_game::save::UNLOCK_ALL_NAME) { nfs_game::save::UNLOCK_ALL_PICTURE } else { nfs_game::save::DEFAULT_PICTURE };
+                Profile::new(n, picture)
+            })
             .or_else(|| nfs_game::save::read_player_lst(&dir).and_then(|s| Profile::from_stem(&s)))
-            .or_else(|| nfs_game::save::list_profiles(&dir).into_iter().next())
+            // `UnlockAll` is offered, not preselected: with no `player.lst` another profile wins,
+            // and a save directory holding only `UnlockAll` stays on the blank `DRIVER` identity
+            // until the chooser is answered.
+            .or_else(|| {
+                nfs_game::save::list_profiles(&dir)
+                    .into_iter()
+                    .find(|p| !nfs_game::save::is_unlock_all_profile(p))
+            })
             .unwrap_or_else(|| Profile::new("DRIVER", nfs_game::save::DEFAULT_PICTURE));
+        // The ready-made profile is created before the load, so a `player.lst` that names it
+        // still works after the file was deleted. It is never written to `player.lst`, and the
+        // fallback above skips it, so its mere existence does not select it.
+        #[cfg(not(test))]
+        if let Err(e) = nfs_game::save::ensure_unlock_all_profile(&dir, &tables) {
+            tracing::warn!(error = %e, "could not create the UnlockAll profile");
+        }
         // the port's JSON career of before 2026-10-01, folded into the profile's `.sav` once
         // (port-only, `save::migrate_legacy_json`)
         if let Some(json) = json {
@@ -308,6 +325,8 @@ impl CareerUi {
     pub fn tournaments(&self) -> Vec<&Tournament> {
         if self.club {
             self.tables.club_tournaments()
+        } else if self.career.unlock_all {
+            self.all_era_tournaments()
         } else {
             self.tables
                 .era_tournaments(self.career.era)
@@ -317,13 +336,38 @@ impl CareerUi {
         }
     }
 
+    /// Every non-hidden era tournament, Classic / Golden / Modern in order. Only the
+    /// `UnlockAll` profile uses it: the original's Evolution list always belongs to the current
+    /// era, while that profile is meant to reach every tournament without a long career.
+    fn all_era_tournaments(&self) -> Vec<&Tournament> {
+        let rank = |e: nfs_formats::career::Era| match e {
+            nfs_formats::career::Era::Classic => 0,
+            nfs_formats::career::Era::Golden => 1,
+            nfs_formats::career::Era::Modern => 2,
+        };
+        let mut v: Vec<&Tournament> = self
+            .tables
+            .tournaments
+            .iter()
+            .filter(|t| matches!(t.kind, nfs_formats::career::TournamentKind::Era(_)) && !t.is_hidden())
+            .collect();
+        v.sort_by_key(|t| (rank(t.era()), t.id));
+        v
+    }
+
     /// Which of 0x5053C0's vectors `Tournament.EventType`'s index `ev_type` stands for, as the
     /// jump table at 0x505450 reads it: 0 the career era's list (0x505404, by `[0x691E50]`), 1…3
     /// the classic, golden and modern club lists (0x505447 / 0x505441 / 0x50543B). Once the
     /// Evolution is finished (`[0x691E54]`, `Career::evolution_complete`) the index is taken one
     /// down: 0…2 are the three club lists (0x50542B…0x50543B) and anything else the era list.
     pub fn event_type_kind(&self, ev_type: usize) -> usize {
-        if self.career.evolution_complete { ev_type + 1 } else { ev_type }
+        if self.career.unlock_all {
+            ev_type
+        } else if self.career.evolution_complete {
+            ev_type + 1
+        } else {
+            ev_type
+        }
     }
 
     /// The vector **0x5053C0** returns for `Tournament.EventType`'s index (`event_type_kind`):
@@ -335,6 +379,7 @@ impl CareerUi {
             1 => self.tables.club_tournaments_of(Era::Classic),
             2 => self.tables.club_tournaments_of(Era::Golden),
             3 => self.tables.club_tournaments_of(Era::Modern),
+            _ if self.career.unlock_all => self.all_era_tournaments(),
             _ => self.tables.era_tournaments(self.career.era).into_iter().filter(|t| !t.is_hidden()).collect(),
         }
     }
@@ -348,6 +393,10 @@ impl CareerUi {
     /// is 3 again.
     pub fn event_type_rows(&self) -> &'static [u32] {
         use nfs_formats::career::Era;
+        if self.career.unlock_all {
+            // the evolution list plus all three club lists
+            return &[470, 471, 472, 473];
+        }
         if self.career.evolution_complete {
             return &[471, 472, 473];
         }
@@ -1987,6 +2036,34 @@ mod tests {
         ui.refresh_tournament(0);
         assert_eq!(ui.current().map(|t| t.id), Some(second.id));
         assert!(!ui.club);
+    }
+
+    /// `UnlockAll` bypasses the era gate: the Evolution list holds every non-hidden era
+    /// tournament in Classic / Golden / Modern order, and all three club lists stay reachable.
+    #[test]
+    fn unlock_all_lists_every_era_and_club() {
+        use nfs_formats::career::Era;
+        let Ok(paths) = GamePaths::locate() else {
+            eprintln!("skipping: original game data not found");
+            return;
+        };
+        let mut ui = CareerUi::load(&paths).unwrap();
+        ui.career = nfs_game::save::unlock_all_career();
+        assert_eq!(ui.event_type_rows(), &[470, 471, 472, 473]);
+        let ids: Vec<i16> = ui.event_type_list(0).iter().map(|t| t.id).collect();
+        let want: Vec<i16> = [Era::Classic, Era::Golden, Era::Modern]
+            .into_iter()
+            .flat_map(|e| ui.tables.era_tournaments(e).into_iter().filter(|t| !t.is_hidden()).map(|t| t.id))
+            .collect();
+        assert_eq!(ids, want);
+        assert_eq!(ui.tournaments().iter().map(|t| t.id).collect::<Vec<_>>(), want);
+        // the club lists are the same three lists the original offers after each era
+        for (ev_type, era) in [(1, Era::Classic), (2, Era::Golden), (3, Era::Modern)] {
+            assert_eq!(
+                ui.event_type_list(ev_type).iter().map(|t| t.id).collect::<Vec<_>>(),
+                ui.tables.club_tournaments_of(era).iter().map(|t| t.id).collect::<Vec<_>>()
+            );
+        }
     }
 
     /// The picture a player clicks on `createplayer` (`[0x5D8F2C]`, 0x4CF940) is what

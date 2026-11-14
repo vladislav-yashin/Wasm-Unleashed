@@ -81,7 +81,10 @@ Loaded resources remain in memory until page reload; explicit unload is exposed
 by the VFS but not yet integrated with game-state ownership.
 
 Profiles, records and settings write into `/saves`, with periodic IndexedDB
-transactions. The toolbar reports whether writes reached persistent storage and
+transactions. Profile names are limited to 16 characters. The first start creates
+an `UnlockAll` profile (`0UnlockAll.sav`) that is offered in the chooser but not
+selected automatically; it opens every track, unique car and tournament with
+maximum credits. The toolbar reports whether writes reached persistent storage and
 supports JSON export/import. Import requires restarting the game to reload its
 in-memory profile. If persistence is unavailable, export before closing the page.
 **Exit** in the game's own front end flushes the saves, leaves browser fullscreen and returns

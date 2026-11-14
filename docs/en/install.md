@@ -36,6 +36,13 @@ Profiles, records and settings live in the browser's IndexedDB under `/saves`. T
 writes reached persistent storage. Use **Export saves** to download a JSON copy and **Import** to load one
 back. Import replaces the stored saves; restart the game afterwards so the in-memory profile is reloaded.
 
+Profile names may be up to 16 characters. On first start the game creates an **UnlockAll** profile
+(`0UnlockAll.sav`) and offers it in the profile list without selecting it. It opens every track, every
+unique car in Quick Race and the dealer (bonus and Factory Driver prize cars included), every tournament
+and maximum credits.
+Its driver portrait is a normal one, so the cockpit view shows the driver's hands. Delete the profile
+and the next start creates it again.
+
 If persistent storage is unavailable (for example, private browsing or a browser that refused the storage
 request), the game keeps progress for the current page only. Export the saves before closing the page.
 

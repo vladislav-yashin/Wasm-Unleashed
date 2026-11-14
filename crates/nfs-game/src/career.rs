@@ -808,6 +808,11 @@ pub struct Career {
     /// Evolution finished (Modern era completed, `0x691E54`).
     #[serde(default)]
     pub evolution_complete: bool,
+    /// Port-only: the profile named `UnlockAll`. It is not stored in the `.sav`; the loader sets it
+    /// from the profile name (`save::load_profile_career`), and the dealer/track/tournament list
+    /// builders use it to show every shipped record.
+    #[serde(skip)]
+    pub unlock_all: bool,
     /// Factory Driver: result per mission (`fac+0xE8`, 1 = passed), indexed like `nfs5.fac`.
     #[serde(default)]
     pub missions: Vec<i16>,
@@ -875,7 +880,7 @@ fn default_year() -> u16 {
 
 impl Default for Career {
     fn default() -> Self {
-        Self { version: SAVE_VERSION, era: Era::Classic, year: 1950, money: STARTING_MONEY, garage: Vec::new(), tournaments: BTreeMap::new(), evolution_complete: false, missions: Vec::new(), prize_taken: Vec::new(), mission_stats: Vec::new(), last_mission: None, market: Vec::new(), spares: Vec::new(), seen_evolution_intro: false, seen_factory_welcome: false, seen_first_mission: false, custom_colours: [0; 8] }
+        Self { version: SAVE_VERSION, era: Era::Classic, year: 1950, money: STARTING_MONEY, garage: Vec::new(), tournaments: BTreeMap::new(), evolution_complete: false, unlock_all: false, missions: Vec::new(), prize_taken: Vec::new(), mission_stats: Vec::new(), last_mission: None, market: Vec::new(), spares: Vec::new(), seen_evolution_intro: false, seen_factory_welcome: false, seen_first_mission: false, custom_colours: [0; 8] }
     }
 }
 
@@ -1029,6 +1034,13 @@ impl Career {
     /// `year` is the chronicle year 0x5032C0. The cheat flag `[0x691A04]` (set only by the
     /// handler 0x50DD70 → 0x4F4440) is not ported. (history: `game-history.md` §17.7)
     pub fn dealer_lists(&self, c: &CarCatalogEntry) -> bool {
+        // `UnlockAll` (port-only): every kind-0 record regardless of its production years,
+        // including the four bonus cars (`+0x204 == 2`) and the three Factory Driver stage prizes
+        // (`+0x204 == 3`). The latter carry their own models and paint sets; only their display
+        // names coincide with ordinary cars.
+        if self.unlock_all {
+            return c.kind == 0;
+        }
         let y = self.year as i16;
         c.year as i16 <= y && y <= c.year_end as i16 && !matches!(c.dealer_flag_204, 2 | 3) && c.kind == 0
     }
@@ -3054,6 +3066,22 @@ mod tests {
         assert_eq!(e.dealer_price(1952), 11_000);
         assert_eq!(e.dealer_price(1953), 10_450);
         assert_eq!(e.dealer_price(1954), 10_230);
+    }
+
+    /// `UnlockAll` lists every kind-0 record whatever its production years, including the bonus
+    /// cars and the flag-3 Factory Driver stage prizes.
+    #[test]
+    fn unlock_all_lists_every_dealer_car() {
+        let mut e = stock_tables(stock_parts(), &[], &[]).catalog.remove(0);
+        (e.year, e.year_end, e.dealer_flag_204, e.kind) = (2005, 2006, 2, 0);
+        let all = Career { year: 1950, unlock_all: true, ..Career::default() };
+        assert!(all.dealer_lists(&e), "a future bonus car is listed");
+        e.dealer_flag_204 = 3;
+        assert!(all.dealer_lists(&e), "the Factory Driver prize car is real content");
+        e.dealer_flag_204 = 1;
+        assert!(all.dealer_lists(&e), "multiplayer-only records are listed too");
+        e.kind = 2;
+        assert!(!all.dealer_lists(&e), "only kind 0 may be raced or listed");
     }
 
     /// A scripted `rand`: each call hands out the next value, and the test checks none is left.

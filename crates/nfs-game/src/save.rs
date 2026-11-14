@@ -40,6 +40,16 @@ use std::path::{Path, PathBuf};
 pub const DEFAULT_PICTURE: u8 = 8;
 /// The template profile the original writes at start-up and clones for a new career (§2.3).
 pub const TEMPLATE_STEM: &str = "XXDefXX";
+/// The port-created profile that opens every shipped track, car and tournament.
+pub const UNLOCK_ALL_NAME: &str = "UnlockAll";
+/// The driver portrait of [`UNLOCK_ALL_NAME`] — entry `0` of `ALLdrivr.fsh` (`M01`).
+///
+/// It must stay **below 8**: a race's `.DRIVER` is the profile picture, and
+/// `CarStyle::apply_driver_detail` (0x43AF51) takes the `>= 8` branch for picture 8 (the
+/// `DEFAULT_PICTURE`/`driv` placeholder), which leaves the arm and hand variants at their style
+/// defaults. Portraits 0…7 take the normal branch and pose the hands on the wheel in the cockpit
+/// view.
+pub const UNLOCK_ALL_PICTURE: u8 = 0;
 
 /// `SaveData\`, relocated out of the read-only installation (see the module docs).
 pub fn save_dir() -> PathBuf {
@@ -74,6 +84,16 @@ impl Profile {
         let d = c.next()?.to_digit(10)? as u8;
         Some(Self { picture: d, name: c.as_str().to_string() })
     }
+    /// The name the front end shows. Only `UnlockAll` differs from the on-disk spelling: the
+    /// browser VFS lower-cases save paths, so its stem comes back as `0unlockall` while the
+    /// profile should still read as `UnlockAll` in the chooser, the licence and the race.
+    pub fn display_name(&self) -> String {
+        if is_unlock_all_profile(self) {
+            UNLOCK_ALL_NAME.to_string()
+        } else {
+            self.name.clone()
+        }
+    }
 }
 
 /// `RebuildUserList` 0x4DEF60: every `*.sav` except the template, sorted by `strcmp(a+1, b+1)`.
@@ -105,6 +125,44 @@ pub fn list_profiles(dir: &Path) -> Vec<Profile> {
 /// the empty name is rejected.
 pub fn name_taken(dir: &Path, name: &str) -> bool {
     name.is_empty() || (0..=9).any(|d| dir.join(format!("{d}{name}.sav")).host_exists())
+}
+
+/// Whether `p` is the port-created [`UNLOCK_ALL_NAME`] profile. The name is the only marker: the
+/// `.sav` format has no field for it, and an original-compatible save must stay readable.
+pub fn is_unlock_all_profile(p: &Profile) -> bool {
+    // The browser VFS lower-cases every save path (`packaging/web/vfs.mjs`), so the file that is
+    // `0UnlockAll.sav` on a native filesystem comes back from `list_profiles` as `0unlockall.sav`.
+    // The marker therefore has to ignore ASCII case; `Profile::stem()` keeps the on-disk spelling.
+    p.name.eq_ignore_ascii_case(UNLOCK_ALL_NAME)
+}
+
+/// The career [`UNLOCK_ALL_NAME`] is created with: the last chronicle year (every track record
+/// unlocked), the Modern era, maximum credits and no completed tournaments. The garage is empty so
+/// the profile is within the original's 80-car limit; every car can be bought from the unlocked
+/// dealer list instead.
+pub fn unlock_all_career() -> Career {
+    let mut c = Career::default();
+    c.era = nfs_formats::career::Era::Modern;
+    c.year = crate::career::YEAR_TABLE.last().copied().unwrap_or(2000);
+    c.money = MONEY_LIMIT;
+    c.unlock_all = true;
+    c
+}
+
+/// Create `<dir>/0UnlockAll.sav` once, without touching `player.lst` (the profile is offered in
+/// the chooser, not selected automatically). An existing profile under **any** picture digit is
+/// kept as it is, including its progress; deleting it makes the next start create it again.
+pub fn ensure_unlock_all_profile(dir: &Path, tables: &CareerTables) -> std::io::Result<Option<Profile>> {
+    // Match the browser's lower-cased `0unlockall.sav` and a native `0UnlockAll.sav` alike;
+    // `name_taken` is case-sensitive and would miss the former on a case-sensitive filesystem.
+    if list_profiles(dir).iter().any(is_unlock_all_profile) {
+        return Ok(None);
+    }
+    let profile = Profile::new(UNLOCK_ALL_NAME, UNLOCK_ALL_PICTURE);
+    let save = career_to_sav(&unlock_all_career(), tables, &profile);
+    write_profile_file(dir, &profile, &save)?;
+    tracing::info!(path = %profile.path(dir).display(), picture = profile.picture, "created the UnlockAll profile");
+    Ok(Some(profile))
 }
 
 /// `player.lst` (0x4DEC7B / 0x4DEF70): the raw stem of the profile to auto-select, no terminator,
@@ -830,8 +888,10 @@ pub fn career_to_sav_with(c: &Career, tables: &CareerTables, profile: &Profile, 
         cars: c.garage.iter().map(|car| car_image(tables, car, true)).collect(),
         money: c.money.clamp(-MONEY_LIMIT, MONEY_LIMIT) as i32,
         picture: profile.picture as u32,
-        player_name: profile.name.clone(),
-        driver_name: profile.name.clone(),
+        // `display_name` keeps the browser's lower-cased `unlockall` stem from leaking into the
+        // driver name and the race plate; for every other profile it is the name itself.
+        player_name: profile.display_name(),
+        driver_name: profile.display_name(),
         // The original clears all three on a new career (0x5013F9…); the port gates the first
         // (`careerfirst`, `Career::seen_evolution_intro`) and carries the other two and the eight
         // custom colours as loaded — *until 2026-09-26 written as zeros and dropped on load*
@@ -1043,7 +1103,9 @@ pub fn read_profile(dir: &Path, profile: &Profile) -> Option<SaveFile> {
 /// `.sav` through [`career_from_sav`]. `None` when there is no file to load.
 pub fn load_profile_career(dir: &Path, profile: &Profile, tables: &CareerTables) -> Option<(Career, SaveFile)> {
     let s = read_profile(dir, profile)?;
-    Some((career_from_sav(&s, tables), s))
+    let mut c = career_from_sav(&s, tables);
+    c.unlock_all = is_unlock_all_profile(profile);
+    Some((c, s))
 }
 
 /// What [`migrate_legacy_json`] did.
@@ -1212,16 +1274,23 @@ pub fn side_from_sav(s: &SaveFile) -> SaveSide {
 /// 0x4DE510 uses (`savegame.md` §2.2, MEDIUM that the buffer is empty then). So an empty name
 /// makes no file here either.
 pub fn write_profile(dir: &Path, profile: &Profile, save: &SaveFile) -> std::io::Result<()> {
-    if profile.name.is_empty() {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "SaveInfo refuses the empty name (0x4DEDB9)"));
-    }
-    nfs_platform::fs::create_dir_all(dir)?;
     // the `TrackRecords` module's side effect (0x4FAD80): `nfs5.trk` is written with every profile save
     if let Err(e) = crate::records::Records::flush_staged() {
         tracing::warn!(error = %e, "records save failed");
     }
-    nfs_platform::fs::write(profile.path(dir), save.write())?;
+    write_profile_file(dir, profile, save)?;
     write_player_lst(dir, &profile.stem())
+}
+
+/// The file half of [`write_profile`] — `SaveInfo` 0x4DEDA0 without `player.lst`. Used by
+/// [`ensure_unlock_all_profile`], whose profile must appear in the chooser without becoming the
+/// selected one.
+fn write_profile_file(dir: &Path, profile: &Profile, save: &SaveFile) -> std::io::Result<()> {
+    if profile.name.is_empty() {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "SaveInfo refuses the empty name (0x4DEDB9)"));
+    }
+    nfs_platform::fs::create_dir_all(dir)?;
+    nfs_platform::fs::write(profile.path(dir), save.write())
 }
 
 #[cfg(test)]
@@ -1319,6 +1388,61 @@ mod tests {
         let entry = back.accessors.as_ref().unwrap().entries.iter().find(|(n, _)| n == "Graphics.Resolutions").map(|(_, v)| v.clone());
         assert_eq!(entry, Some(AccessorValue::CharVect { items: None, selection: 3 }), "the selection alone, no list");
         assert_eq!(side_from_sav(&back).settings.resolution, 3);
+    }
+
+    /// The ready-made profile: created once, with the normal driver-portrait path, the last
+    /// chronicle year and maximum credits — and without `player.lst`, so it is offered rather than
+    /// selected. A later start keeps whatever progress the file has.
+    #[test]
+    fn unlock_all_is_created_once_without_being_selected() {
+        let dir = std::env::temp_dir().join(format!("nfs-unlockall-{}", std::process::id()));
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
+        let tables = CareerTables { raw: Default::default(), tracks: vec![], tournaments: vec![], parts: vec![], personalities: vec![], missions: vec![], strings: Default::default(), catalog: vec![], package_count: 0 };
+        let p = ensure_unlock_all_profile(&dir, &tables).unwrap().expect("fresh directory creates it");
+        assert_eq!(p, Profile::new(UNLOCK_ALL_NAME, UNLOCK_ALL_PICTURE));
+        assert_eq!(p.stem(), "0UnlockAll");
+        assert!(UNLOCK_ALL_PICTURE < 8, "the cockpit hands need the portrait's normal branch");
+        assert!(!dir.join("player.lst").host_exists(), "the profile is offered, not selected");
+        let sav = read_profile(&dir, &p).unwrap();
+        let player = sav.player.as_ref().unwrap();
+        assert_eq!(player.picture, u32::from(UNLOCK_ALL_PICTURE));
+        assert_eq!(player.player_name, UNLOCK_ALL_NAME);
+        assert_eq!(player.driver_name, UNLOCK_ALL_NAME);
+        assert_eq!(p.display_name(), UNLOCK_ALL_NAME);
+        assert_eq!(player.money, MONEY_LIMIT as i32);
+        let tournament = sav.tournament.as_ref().unwrap();
+        assert_eq!(tournament.year, *crate::career::YEAR_TABLE.last().unwrap() as u32);
+        assert_eq!(tournament.era_type, nfs_formats::career::Era::Modern.string_id());
+        let (career, _) = load_profile_career(&dir, &p, &tables).unwrap();
+        assert!(career.unlock_all);
+        // a second start sees the name taken and leaves the file (and its progress) alone
+        let before = nfs_platform::fs::read(p.path(&dir)).unwrap();
+        assert_eq!(ensure_unlock_all_profile(&dir, &tables).unwrap(), None);
+        assert_eq!(nfs_platform::fs::read(p.path(&dir)).unwrap(), before);
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
+    }
+
+    /// The browser VFS lower-cases save paths, so `list_profiles` hands back `0unlockall` for a
+    /// profile written as `0UnlockAll.sav`. That spelling must still switch the profile's content
+    /// on, and the front end must show the canonical name.
+    #[test]
+    fn the_web_lowercased_unlock_all_is_still_unlock_all() {
+        let dir = std::env::temp_dir().join(format!("nfs-unlockall-web-{}", std::process::id()));
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
+        let tables = CareerTables { raw: Default::default(), tracks: vec![], tournaments: vec![], parts: vec![], personalities: vec![], missions: vec![], strings: Default::default(), catalog: vec![], package_count: 0 };
+        let p = Profile::from_stem("0unlockall").expect("a digit and a name");
+        assert_eq!(p.name, "unlockall", "the raw on-disk name");
+        assert_eq!(p.stem(), "0unlockall", "reads and writes the lower-cased path");
+        assert!(is_unlock_all_profile(&p), "case must not hide the marker");
+        assert_eq!(p.display_name(), UNLOCK_ALL_NAME);
+        let sav = career_to_sav(&unlock_all_career(), &tables, &p);
+        write_profile(&dir, &p, &sav).unwrap();
+        let (career, _) = load_profile_career(&dir, &p, &tables).unwrap();
+        assert!(career.unlock_all, "the lower-cased file gets every list");
+        // the existing lower-cased profile also stops `ensure` from adding an upper-cased twin
+        assert_eq!(ensure_unlock_all_profile(&dir, &tables).unwrap(), None);
+        assert_eq!(list_profiles(&dir).len(), 1);
+        let _ = nfs_platform::fs::remove_dir_all(&dir);
     }
 
     #[test]

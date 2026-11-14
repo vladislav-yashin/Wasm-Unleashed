@@ -749,7 +749,7 @@ impl App {
             // start-up one for a CLI `--replay` with no career.)*
             Some(self.replay.setup.driver_name.clone())
         } else {
-            self.career.as_ref().map(|c| c.profile.name.clone())
+            self.career.as_ref().map(|c| c.profile.display_name())
         };
         // A launch with no front end (`fe = 0`) never runs the per-car set-up 0x4EEDA0 (the only writer
         // of `.DRIVERNAME` 0x13B at 0x4EEDF1 and `.LICENSE` 0x13C at 0x4EEE7E, both from its one name

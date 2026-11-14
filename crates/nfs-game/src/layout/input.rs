@@ -92,12 +92,18 @@ impl LayoutScreen {
     /// 0x4E6016 pushes **15**, `COMMS.PASSWORD` at 0x50B9C1 pushes **7**, `Comms.ChatInput` at
     /// 0x50BA95 pushes **45** (0x2D).
     ///
+    /// **Port deviation:** the profile-name box takes **16** characters, not the original's 8.
+    /// Sixteen is comfortably clear of every other limit the name reaches — the 100-byte
+    /// `list_profiles`/`player.lst` cutoffs and the 0x48-byte driver field of a track record —
+    /// and leaves the in-game `UnlockAll` profile (nine characters) room to exist without a
+    /// special case in the input layer.
+    ///
     /// Every other box's limit lives in a registration this port has not read, so it is left
     /// **unlimited** rather than guessed — a cap invented here would silently truncate a name the
     /// original accepts, which is worse than one it would have refused.
     pub fn input_max_len(accessor: &str) -> Option<usize> {
         match accessor {
-            "UserList.NameInput" => Some(8),
+            "UserList.NameInput" => Some(16),
             "ANOTHER" => Some(15),
             "COMMS.PASSWORD" => Some(7),
             "Comms.ChatInput" => Some(45),

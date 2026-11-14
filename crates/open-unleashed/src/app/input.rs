@@ -214,10 +214,11 @@ impl App {
                     // here, not `set_cars2`, so `GenericCar2.Car`'s own list still lags a `SETTYPE*`
                     // that does not also change the chronicle year)
                     let year = self.career.as_ref().map_or(nfs_game::track_list::START_YEAR, |cu| cu.career.year as i32);
+                    let unlock_all = self.career.as_ref().is_some_and(|cu| cu.career.unlock_all);
                     let catalog = self.career.as_ref().map(|cu| cu.tables.catalog.clone()).unwrap_or_else(|| self.fe_car_catalog());
                     if let Some(m) = self.fe.menu.as_mut().or(self.fe.menu_template.as_mut()) {
                         m.set_track_lists(&self.fe.track_tables, year, t);
-                        m.set_cars(&catalog, t);
+                        m.set_cars(&catalog, t, unlock_all);
                     }
                 }
                 // `SETTYPECAREERMODE` 0x510B50, after the type and 0x4F3E40: `0x5015B0` — the

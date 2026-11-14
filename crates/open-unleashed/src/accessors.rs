@@ -467,7 +467,7 @@ impl App {
                 let c = self.career.as_ref()?;
                 let idx = c.car_sel.min(c.career.garage.len().saturating_sub(1));
                 let car = c.tables.car(c.career.garage.get(idx)?.car_id)?;
-                self.fe.strings.get(2550)?.replacen("%s", &car.display_name.to_string(), 1)
+                self.fe.strings.get(2550)?.replacen("%s", &self.car_label(car, false), 1)
             }
             "Parts.InstallList" if modifier.is_empty() => {
                 let c = self.career.as_ref()?;
@@ -549,12 +549,12 @@ impl App {
             // accessor's `SHORT` hands the index to a virtual of its own (0x4BC54D) rather than
             // falling through to the display name.
             b if modifier == "SHORT" && matches!(b, "OwnedCars.Car" | "DealerCar.Car" | "GenericCar.Car" | "CARSETTINGS.CAR") => {
-                self.logo_car(Some(base), None)?.family.to_string()
+                self.car_label(self.logo_car(Some(base), None)?, true)
             }
             // the dealer's and the car-select list's own car by its full name — the same car their
             // `SHORT` and `CLASSLISTING` forms above resolve. (Until 2026-09-25 these fell into the
             // garage arm below, so `dealership.lay`'s name line showed the player's own car.)
-            "DealerCar.Car" | "GenericCar.Car" => self.logo_car(Some(base), None)?.display_name.to_string(),
+            "DealerCar.Car" | "GenericCar.Car" => self.car_label(self.logo_car(Some(base), None)?, false),
             "OwnedCars.Car" | "CARSETTINGS.CAR" => {
                 // the garage screens ask the same accessor for the car's money and damage figures
                 let c = career?;
@@ -566,7 +566,7 @@ impl App {
                         .garage
                         .get(idx)
                         .and_then(|o| c.tables.car(o.car_id))
-                        .map(|e| e.display_name.to_string())
+                        .map(|e| self.car_label(e, false))
                         .unwrap_or_else(|| self.specs.name.to_string()),
                 }
             }
@@ -595,20 +595,16 @@ impl App {
                 let c = nfs_game::opponents::OpponentChoice::from_index(m.opp_car as u32);
                 self.fe.strings.get(c.string_id())?.to_string()
             }
-            "PrizeCars.Car" if let Some(car) = self.prize_car() => {
-                if modifier == "SHORT" { car.family.to_string() } else { car.display_name.to_string() }
-            }
+            "PrizeCars.Car" if let Some(car) = self.prize_car() => self.car_label(car, modifier == "SHORT"),
             // the merged index in list A (0x4F4DF0 true): the slot-12 text of the garage car, the
             // same record `OwnedCars.Car` answers (`logo_car`'s garage arm)
             "zMergedList.Car" if menu.is_some_and(|m| m.car_garage) && matches!(modifier, "" | "SHORT") => {
-                let car = self.logo_car(Some("zMergedList.Car"), None)?;
-                if modifier == "SHORT" { car.family.to_string() } else { car.display_name.to_string() }
+                self.car_label(self.logo_car(Some("zMergedList.Car"), None)?, modifier == "SHORT")
             }
             "zMergedList.Car" | "PrizeCars.Car" => match menu {
                 _ if !matches!(modifier, "" | "SHORT") => return None,
                 // `(SHORT)` asks for the short form, which for a car is its family name
-                Some(m) if modifier == "SHORT" => (*m.car()?).family.to_string(),
-                Some(m) => (*m.car()?).display_name.to_string(),
+                Some(m) => self.car_label(m.car()?, modifier == "SHORT"),
                 None => self.specs.name.to_string(),
             },
             // All seven colour combos count the same way — their row's number from 1, which is what
@@ -628,8 +624,7 @@ impl App {
             // (`FeCatalogues::cars2`'s field doc)
             "GenericCar2.Car" => match menu {
                 _ if !matches!(modifier, "" | "SHORT") => return None,
-                Some(m) if modifier == "SHORT" => m.cars2.get(m.car2_idx)?.family.to_string(),
-                Some(m) => m.cars2.get(m.car2_idx)?.display_name.to_string(),
+                Some(m) => self.car_label(m.cars2.get(m.car2_idx)?, modifier == "SHORT"),
                 None => return None,
             },
             _ => return self.other_accessor(base, modifier),

@@ -281,7 +281,7 @@ impl App {
         }
         let profile = self.career.as_ref().map(|c| c.profile.clone());
         let picture = profile.as_ref().map_or(0, |p| p.picture.min(8) as usize);
-        let name = profile.as_ref().map(|p| p.name.clone()).unwrap_or_default();
+        let name = profile.as_ref().map(|p| p.display_name()).unwrap_or_default();
         let stage = self.badge_stage();
         let rank = stage
             .and_then(|st| {

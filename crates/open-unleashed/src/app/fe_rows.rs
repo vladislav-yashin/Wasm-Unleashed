@@ -225,7 +225,7 @@ impl App {
                 Some((
                     profiles
                         .into_iter()
-                        .map(|p| ListRow::Text(p.name))
+                        .map(|p| ListRow::Text(p.display_name()))
                         .collect(),
                     current,
                 ))

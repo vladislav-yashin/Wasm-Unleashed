@@ -3100,8 +3100,9 @@ fn a_scrollbar_sliver_is_clipped_to_the_trough_between_the_arrows() {
 fn an_input_box_takes_everything_printable_except_a_percent() {
     use nfs_game::layout::LayoutScreen;
 
-    // the three limits read out of the registrations that name an accessor this port can see
-    assert_eq!(LayoutScreen::input_max_len("UserList.NameInput"), Some(8), "0x4E5D9E pushes 8");
+    // the three limits read out of the registrations that name an accessor this port can see;
+    // the profile name is the port's deliberate 16-character deviation from the original's 8
+    assert_eq!(LayoutScreen::input_max_len("UserList.NameInput"), Some(16), "the profile name takes 16");
     assert_eq!(LayoutScreen::input_max_len("ANOTHER"), Some(15), "0x4E6016 pushes 0xF");
     assert_eq!(LayoutScreen::input_max_len("COMMS.PASSWORD"), Some(7), "0x50B9C1 pushes 7");
     // an accessor whose registration this port has not read is left unlimited rather than guessed

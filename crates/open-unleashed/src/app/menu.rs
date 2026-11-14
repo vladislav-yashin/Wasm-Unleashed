@@ -195,13 +195,15 @@ impl FeCatalogues {
     /// `catalog` for the current `game_type`. Out-of-range `car_idx`/`car_garage` selections are
     /// left to [`FeCatalogues::car`]'s own clamp (0x4F3070…0x4F308B, matched) — the same shape as
     /// `set_cars2` below.
-    pub(crate) fn set_cars(&mut self, catalog: &[nfs_formats::fedata::CarCatalogEntry], game_type: u8) {
-        self.cars = generic_car_list(catalog, game_type);
+    pub(crate) fn set_cars(&mut self, catalog: &[nfs_formats::fedata::CarCatalogEntry], game_type: u8, unlock_all: bool) {
+        self.cars = generic_car_list(catalog, game_type, unlock_all);
     }
 
     /// Rebuild `cars2` (`[0x6919F4]`, see the field doc) from the full `catalog` for the chronicle
-    /// `year`: kind-0 records released by `year` (`record.year <= year`), 0x4F0F50-sorted.
-    pub(crate) fn set_cars2(&mut self, catalog: &[nfs_formats::fedata::CarCatalogEntry], year: i32) {
+    /// `year`: kind-0 records released by `year` (`record.year <= year`), 0x4F0F50-sorted. The
+    /// `unlock_all` argument is kept for the caller's symmetry with `set_cars`; this list has no
+    /// dealer-flag arm.
+    pub(crate) fn set_cars2(&mut self, catalog: &[nfs_formats::fedata::CarCatalogEntry], year: i32, _unlock_all: bool) {
         let mut v: Vec<_> = catalog.iter().filter(|c| c.kind == 0 && c.year as i32 <= year).cloned().collect();
         era_class_year_sort(&mut v, era_class_year_key);
         self.cars2 = v;

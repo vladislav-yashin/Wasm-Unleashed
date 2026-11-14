@@ -757,10 +757,11 @@ impl TrackRecordFile {
     /// driver name that runs past the 0x48 bytes before the time is cut there (the original's
     /// `strcpy` would run on into the time it had just stored). UNREACHABLE through the game's own
     /// inputs (2026-09-30): the name is the profile's (`self.player_name` ← `profile.name`,
-    /// the `.DRIVERNAME` 0x5012B0 argument), typed into `UserList.NameInput`, whose accessor
-    /// takes at most **8** characters (`FEStringAccessor` ctor 0x4BC8B0, `maxLen` 8 at 0x4E5D9E,
-    /// `layout.rs` `input_max_len`); only a hand-made save file whose stem is 73…95 characters
-    /// (the profile lister accepts names under 0x64 bytes) could pass 0x48 — outside the game.
+    /// the `.DRIVERNAME` 0x5012B0 argument), typed into `UserList.NameInput` — the original's
+    /// accessor takes 8 characters (`FEStringAccessor` ctor 0x4BC8B0, `maxLen` 8 at 0x4E5D9E)
+    /// and this port deliberately allows 16 (`layout.rs` `input_max_len`); only a hand-made save
+    /// file whose stem is 73…95 characters (the profile lister accepts names under 0x64 bytes)
+    /// could pass 0x48 — outside the game.
     ///
     /// An id no record carries is **not** refused: the search loop 0x4FAFDD…0x4FAFEB falls out
     /// with `edi` still the table base `[0x691CE8]` and 0x4FAFED adds 0x1B0 to that, so the time

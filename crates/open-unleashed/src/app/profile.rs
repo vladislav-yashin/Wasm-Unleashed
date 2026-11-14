@@ -300,7 +300,13 @@ impl App {
     /// The chronicle year 0x4FBC10 gates the tracks on, `[0x5DB764]` (0x5032C0): the profile's
     /// career's, else the global's initial 0x79E.
     fn career_year(&self) -> i32 {
-        self.career.as_ref().map_or(nfs_game::track_list::START_YEAR, |c| c.career.year as i32)
+        self.career.as_ref().map_or(nfs_game::track_list::START_YEAR, |c| {
+            if c.career.unlock_all {
+                nfs_game::career::YEAR_TABLE.last().copied().unwrap_or(2000) as i32
+            } else {
+                c.career.year as i32
+            }
+        })
     }
 
     /// A track list's row text, 0x4FA560: `FEStrings[trk+4]` of the record the row holds (the
@@ -356,11 +362,12 @@ impl App {
     /// where both are kept in step too.
     pub(crate) fn rebuild_track_lists(&mut self) {
         let year = self.career_year();
+        let unlock_all = self.career.as_ref().is_some_and(|c| c.career.unlock_all);
         let catalog = self.career.as_ref().map(|c| c.tables.catalog.clone()).unwrap_or_else(|| self.fe_car_catalog());
         if let Some(m) = self.fe.menu.as_mut().or(self.fe.menu_template.as_mut()) {
             m.set_track_lists(&self.fe.track_tables, year, self.fe.game_type);
-            m.set_cars(&catalog, self.fe.game_type);
-            m.set_cars2(&catalog, year);
+            m.set_cars(&catalog, self.fe.game_type, unlock_all);
+            m.set_cars2(&catalog, year, unlock_all);
         }
     }
 

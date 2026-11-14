@@ -249,7 +249,7 @@ impl App {
                         // same as a shipped car's own `DecalNum`). *(Until now: no licence text,
                         // and no race-number text either, on any shipped garage/dealer car.)*
                         c.page_text = Some(nfs_assets::car::PageText {
-                            license: self.career.as_ref().map(|c| c.profile.name.clone()).unwrap_or_default(),
+                            license: self.career.as_ref().map(|c| c.profile.display_name()).unwrap_or_default(),
                             race_number: decal.unwrap_or(-1) as i32,
                         });
                         c
