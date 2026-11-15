@@ -23,10 +23,17 @@ WEB_BUILD_FLAGS ?=
 EXE := $(if $(filter Windows_NT,$(OS)),.exe,)
 RELAY_BINARY ?= target/debug/nfs-relay$(EXE)
 
+DEPLOY_SSH_HOST ?=
+DEPLOY_SSH_PORT ?= 22
+DEPLOY_SSH_USER ?=
+DEPLOY_HELPER ?= /usr/local/bin/open-unleashed-deploy
+DEPLOY_COMPOSE ?= /opt/open-unleashed/compose.yaml
+
 WASM_BINDGEN_VERSION := $(shell awk '/^name = "wasm-bindgen"$$/{getline; gsub(/version = "|"/, ""); print; exit}' Cargo.lock)
 
 .PHONY: help setup-web install-wasm-bindgen build-web web-data serve relay-build relay \
 	test test-rust test-web check-wasm check-deploy ci fmt fmt-check \
+	deploy-sync \
 	docker-up docker-down docker-logs clean clean-all
 
 help:
@@ -54,6 +61,9 @@ help:
 		'  make fmt                        format Rust code' \
 		'  make fmt-check                  check Rust formatting' \
 		'' \
+		'Deployment:' \
+		'  make deploy-sync                sync the compose file and helper to DEPLOY_SSH_HOST' \
+		'' \
 		'Variables:' \
 		'  GAME_DIR       original installation root containing GameData/ and FEData/' \
 		'  MOVIE_EXE      optional PE image override; auto-detected by compatibility' \
@@ -62,7 +72,10 @@ help:
 		'  WEB_HOST       local server host (default: 127.0.0.1)' \
 		'  WEB_PORT       local server port (default: 8080)' \
 		'  PYTHON         Python interpreter (default: python3)' \
-		'  RUST_TOOLCHAIN Rust toolchain (default: stable)'
+		'  RUST_TOOLCHAIN Rust toolchain (default: stable)' \
+		'  DEPLOY_SSH_HOST  deploy host for deploy-sync (required there)' \
+		'  DEPLOY_SSH_PORT  deploy SSH port (default: 22)' \
+		'  DEPLOY_SSH_USER  optional SSH login for deploy-sync (default: current user)'
 
 setup-web:
 	rustup target add $(WASM_TARGET) --toolchain $(RUST_TOOLCHAIN)
@@ -133,6 +146,38 @@ check-deploy:
 	$(MAKE) -n web-data GAME_DIR=/tmp/game >/dev/null
 
 ci: check-wasm check-deploy test-rust test-web
+
+# Install the deployment inputs on a prepared server without re-running the whole
+# setup script: the compose file and the restricted deploy helper are copied and
+# checked against the local sources. deploy.env, the SSH key and authorized_keys
+# are left untouched. Requires sudo on the server; DEPLOY_SSH_USER defaults to
+# the current SSH user and the port to 22.
+deploy-sync:
+	@if [ -z "$(DEPLOY_SSH_HOST)" ]; then \
+		echo "DEPLOY_SSH_HOST is required. Run 'make help' for usage." >&2; \
+		exit 2; \
+	fi
+	@$(PYTHON) packaging/web/deploy/generate-setup.py --check >/dev/null
+	@set -e; \
+	port="$(or $(DEPLOY_SSH_PORT),22)"; \
+	target="$(if $(DEPLOY_SSH_USER),$(DEPLOY_SSH_USER)@,)$(DEPLOY_SSH_HOST)"; \
+	stage="$$(ssh -p "$$port" "$$target" 'mktemp -d')"; \
+	cleanup() { ssh -p "$$port" "$$target" rm -rf "$$stage" >/dev/null 2>&1 || true; }; \
+	trap cleanup EXIT INT TERM; \
+	scp -q -P "$$port" packaging/web/deploy/remote-deploy.sh "$$target:$$stage/remote-deploy.sh"; \
+	scp -q -P "$$port" packaging/web/compose.deploy.yaml "$$target:$$stage/compose.deploy.yaml"; \
+	ssh -p "$$port" "$$target" "set -e; \
+		sudo cp -a $(DEPLOY_HELPER) $(DEPLOY_HELPER).bak 2>/dev/null || true; \
+		sudo install -m 0755 -o root -g root '$$stage/remote-deploy.sh' $(DEPLOY_HELPER); \
+		sudo install -m 0644 -o root -g root '$$stage/compose.deploy.yaml' $(DEPLOY_COMPOSE)"; \
+	helper_sum="$$(sha256sum packaging/web/deploy/remote-deploy.sh | cut -d' ' -f1)"; \
+	compose_sum="$$(sha256sum packaging/web/compose.deploy.yaml | cut -d' ' -f1)"; \
+	remote_sum="$$(ssh -p "$$port" "$$target" "sha256sum $(DEPLOY_HELPER) $(DEPLOY_COMPOSE)")"; \
+	printf '%s\n' "$$remote_sum" | grep -q "^$$helper_sum " \
+		|| { echo "$(DEPLOY_HELPER) on $$target does not match remote-deploy.sh" >&2; exit 1; }; \
+	printf '%s\n' "$$remote_sum" | grep -q "^$$compose_sum " \
+		|| { echo "$(DEPLOY_COMPOSE) on $$target does not match compose.deploy.yaml" >&2; exit 1; }; \
+	printf 'synced %s and %s on %s\n' "$(DEPLOY_HELPER)" "$(DEPLOY_COMPOSE)" "$$target"
 
 fmt:
 	$(CARGO) +$(RUST_TOOLCHAIN) fmt --all

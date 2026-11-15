@@ -139,6 +139,21 @@ private key in `DEPLOY_SSH_KEY`, then remove it from the server. Re-run the
 script after changing `compose.deploy.yaml` or `remote-deploy.sh`; it preserves
 the existing `deploy.env` and SSH key.
 
+To update only those two files on an already prepared server, use the Makefile
+target. It copies the local sources, keeps the previous helper as
+`/usr/local/bin/open-unleashed-deploy.bak`, and fails if the installed files do
+not match the local checksums:
+
+```sh
+make deploy-sync DEPLOY_SSH_HOST=your.host.example
+```
+
+`DEPLOY_SSH_USER` and `DEPLOY_SSH_PORT` select the login and the port; the login
+must be able to run `sudo`. `deploy.env`, the CI key and `authorized_keys` are
+left untouched. A server that still runs an older helper rejects the two-image
+SSH command with `deploy: unexpected arguments in SSH command`; run this target
+after any change to the helper or the compose file.
+
 Prepare the original game data locally. The `web-data` target stages only the
 files the browser build consumes, filters unneeded installation files, and
 validates `nfs5.exe`/`Porsche.exe`/`PORSCHE.ICD` before extracting the movie
@@ -286,6 +301,9 @@ OPEN_UNLEASHED_IMAGE='ghcr.io/example/open-unleashed@sha256:00000000000000000000
   docker compose -f packaging/web/compose.deploy.yaml config \
   --env-file packaging/web/deploy/deploy.env.example
 ```
+
+`make check-deploy` runs these checks and also verifies that the generated
+`setup-server.sh` matches its embedded sources.
 
 The CI image job also starts the pushed image with the production read-only and
 tmpfs settings, checks `/healthz`, checks `index.html`, and verifies that the
