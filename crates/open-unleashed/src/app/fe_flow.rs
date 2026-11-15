@@ -128,6 +128,9 @@ impl App {
                         Ok(()) => {
                             self.fe.user_sel = None;
                             self.bind_lists();
+                            // the chooser's portrait is the selected row's (0x4CFB70): the removed
+                            // row must not keep its picture
+                            self.bind_player_pictures();
                         }
                         Err(e) => {
                             tracing::info!(error = %e, "profile not deleted");

@@ -250,6 +250,14 @@ impl App {
     /// `M01`…`M04`, `F01`…`F04` and `driv`. This closes the UNKNOWN `RE/notes/layouts.md` left on
     /// where the chosen index lives.
     ///
+    /// **The chooser's portrait belongs to the selected row, not to the loaded profile**
+    /// (`portrait_entry`). `selectname.lay` is the only screen carrying a `UserList.UserList`
+    /// list box, and `FEPlayerPicture::update` reads *that* accessor: on a clean start the loaded
+    /// identity is the blank `DRIVER` (`DEFAULT_PICTURE` 8, the `driv` placeholder) while the
+    /// list already offers the created `UnlockAll`, so taking the loaded profile's picture showed
+    /// the placeholder even with the row selected. The other screens (licence and badge) carry
+    /// no such list and keep the profile's portrait.
+    ///
     /// The licence card is `license`, `license2`, `license3` or `license4` (the table at 0x5D8E50)
     /// by **the stage of the mission the career is on, minus one** — 0x51AE00 finds the first
     /// mission whose `+0xE8` result is still 0, answers −1 when that is mission 0 (nothing passed
@@ -280,7 +288,14 @@ impl App {
             return;
         }
         let profile = self.career.as_ref().map(|c| c.profile.clone());
-        let picture = profile.as_ref().map_or(0, |p| p.picture.min(8) as usize);
+        let has_user_list = l.list_boxes().iter().any(|w| w.accessor.as_deref() == Some("UserList.UserList"));
+        let selected = if has_user_list {
+            let profiles = nfs_game::save::list_profiles(&nfs_game::save::save_dir());
+            self.user_row(&profiles).and_then(|i| profiles.get(i)).cloned()
+        } else {
+            None
+        };
+        let picture = portrait_entry(has_user_list, selected.as_ref(), profile.as_ref());
         let name = profile.as_ref().map(|p| p.display_name()).unwrap_or_default();
         let stage = self.badge_stage();
         let rank = stage
@@ -473,5 +488,36 @@ impl App {
         for (index, rows, current) in strips {
             l.set_ko_strip(index, rows, current);
         }
+    }
+}
+
+/// The `ALLdrivr.fsh` entry a screen's portrait shows (`FEPlayerPicture::update`, 0x4CFB70).
+///
+/// A screen with the `UserList.UserList` list box (`selectname.lay`) takes the **selected row's**
+/// picture — the row under the cursor in the chooser, not the loaded profile's. Screens without
+/// it (the licence and badge screens) show the loaded profile's. The index is clamped to 0…8,
+/// the nine entries of the pack (`M01`…`M04`, `F01`…`F04`, `driv`).
+fn portrait_entry(has_user_list: bool, selected: Option<&nfs_game::save::Profile>, loaded: Option<&nfs_game::save::Profile>) -> usize {
+    let chosen = if has_user_list { selected.or(loaded) } else { loaded };
+    chosen.map_or(0, |p| p.picture.min(8) as usize)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The chooser's portrait follows the selected row; every other screen follows the loaded
+    /// profile. A clean start has the blank `DRIVER` (picture 8) loaded while the list already
+    /// holds the created `UnlockAll` (picture 0), which is the case this distinguishes.
+    #[test]
+    fn the_chooser_portrait_follows_the_selected_row() {
+        let unlock = nfs_game::save::Profile::new("UnlockAll", 0);
+        let driver = nfs_game::save::Profile::new("DRIVER", nfs_game::save::DEFAULT_PICTURE);
+        assert_eq!(portrait_entry(true, Some(&unlock), Some(&driver)), 0, "the selected row wins over the loaded profile");
+        assert_eq!(portrait_entry(true, None, Some(&driver)), 8, "no row keeps the loaded profile's placeholder");
+        assert_eq!(portrait_entry(false, Some(&unlock), Some(&driver)), 8, "the licence screens ignore a stale row");
+        assert_eq!(portrait_entry(false, None, Some(&unlock)), 0);
+        assert_eq!(portrait_entry(true, None, None), 0);
+        assert_eq!(portrait_entry(true, Some(&nfs_game::save::Profile::new("Nine", 9)), None), 8, "ALLdrivr.fsh has entries 0…8");
     }
 }

@@ -1091,6 +1091,23 @@ fn the_driver_pictures_are_numbered_0_to_7() {
     assert!(!numbers.contains(&(nfs_game::save::DEFAULT_PICTURE as i64)));
 }
 
+/// `selectname.lay` carries both the profile list and the portrait it feeds: `FEPlayerPicture::update`
+/// (0x4CFB70) reads the `UserList.UserList` accessor's selected row, so the chooser's portrait is the
+/// selected profile's. The port only follows the row on a screen with that list box.
+#[test]
+fn the_chooser_portrait_is_fed_by_the_profile_list() {
+    let Ok(paths) = GamePaths::locate() else {
+        eprintln!("skipping: no game data");
+        return;
+    };
+    let f = paths.fe_data().join("Layouts").join("selectname.lay");
+    let text: String = std::fs::read(f).unwrap().iter().map(|&b| nfs_formats::locale::cp1252(b)).collect();
+    let layout = nfs_formats::lay::Layout::parse(&text);
+    let has_user_list = layout.elements.iter().any(|e| e.class == "NFS5.ListBox" && e.get("accessor") == Some("UserList.UserList"));
+    assert!(has_user_list, "the chooser lists the profiles");
+    assert!(layout.elements.iter().any(|e| e.class == "NFS5.PLAYERPICTURE"), "…and shows the selected row's portrait");
+}
+
 /// The stems — the thin verticals a menu button hangs off its ends — are drawn when
 /// `data.glintybox` is not −1, and **none** of the 153 shipped buttons carries −1.
 /// `RE/notes/controls.md` §4.24.

@@ -1116,6 +1116,9 @@ impl App {
             }) {
                 self.fe.user_sel = Some(row);
                 self.bind_lists();
+                // `FEPlayerPicture::update` (0x4CFB70) reads the selected row's text, so the
+                // chooser's portrait changes with the selection
+                self.bind_player_pictures();
                 return;
             }
 
