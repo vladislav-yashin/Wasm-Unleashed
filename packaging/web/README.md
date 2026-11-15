@@ -86,7 +86,12 @@ Profiles, records and settings write into `/saves`, with periodic IndexedDB
 transactions. Profile names are limited to 16 characters. The first start creates
 an `UnlockAll` profile (`0UnlockAll.sav`) that is offered in the chooser but not
 selected automatically; it opens every track, unique car and tournament with
-maximum credits. The toolbar reports whether writes reached persistent storage and
+maximum credits. The loader's **UnlockAll name** field sets this profile's name;
+the value is kept in the page's `localStorage` and applies at the next start. The
+name is the profile's only marker (1–16 characters, no `%` or `\ / : * ? " < > |`):
+an existing profile with the same name becomes the unlocked one, and an existing
+`0UnlockAll.sav` is not renamed, so choose a name no other profile uses. The toolbar
+reports whether writes reached persistent storage and
 supports JSON export/import. Import requires restarting the game to reload its
 in-memory profile. If persistence is unavailable, export before closing the page.
 **Exit** in the game's own front end flushes the saves, leaves browser fullscreen and returns
@@ -147,7 +152,7 @@ the shell does not retranslate them.
 cargo +stable check -p open-unleashed --target wasm32-unknown-unknown --locked
 cargo +stable test -p nfs-formats -p nfs-net --lib -p nfs-relay
 python3 -m unittest discover -s tools/web -p 'test_*.py'
-node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs packaging/web/exit-game.test.mjs packaging/web/startup-assets.test.mjs packaging/web/net.test.mjs
+node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs packaging/web/unlock-all.test.mjs packaging/web/exit-game.test.mjs packaging/web/startup-assets.test.mjs packaging/web/net.test.mjs
 ```
 
 For Firefox frame-pacing investigations, pass `--profile-webgl` to

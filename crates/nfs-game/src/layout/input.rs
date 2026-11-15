@@ -103,7 +103,7 @@ impl LayoutScreen {
     /// original accepts, which is worse than one it would have refused.
     pub fn input_max_len(accessor: &str) -> Option<usize> {
         match accessor {
-            "UserList.NameInput" => Some(16),
+            "UserList.NameInput" => Some(crate::save::PROFILE_NAME_MAX_CHARS),
             "ANOTHER" => Some(15),
             "COMMS.PASSWORD" => Some(7),
             "Comms.ChatInput" => Some(45),

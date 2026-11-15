@@ -40,6 +40,9 @@ Profile names may be up to 16 characters. On first start the game creates an **U
 (`0UnlockAll.sav`) and offers it in the profile list without selecting it. It opens every track, every
 unique car in Quick Race and the dealer (bonus and Factory Driver prize cars included), every tournament
 and maximum credits.
+The **UnlockAll name** field on the game page sets this profile's name. It applies at the next start:
+the game creates the profile under the new name and does not rename the old one, so choose a name no
+other profile uses.
 Its driver portrait is a normal one, so the cockpit view shows the driver's hands. Delete the profile
 and the next start creates it again.
 

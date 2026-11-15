@@ -35,13 +35,68 @@ use nfs_formats::career::{Era, MISSION_RECORD_SIZE, PART_RECORD_SIZE, TOURNAMENT
 use nfs_formats::fedata::CAR_RECORD_SIZE;
 use nfs_formats::sav::{AccessorBlock, AccessorValue, KnockoutState, PlayerInfo, SaveFile, SavedCar, SavedPart, TournamentModule, UsedCarMarket, FE_CAR_IMAGE};
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 /// `[0x5D8F2C]` / `[0x5DB748]` default driver picture.
 pub const DEFAULT_PICTURE: u8 = 8;
 /// The template profile the original writes at start-up and clones for a new career (§2.3).
 pub const TEMPLATE_STEM: &str = "XXDefXX";
-/// The port-created profile that opens every shipped track, car and tournament.
+/// The default name of the port-created profile that opens every shipped track, car and
+/// tournament. The browser shell may choose another name before start-up; [`unlock_all_name`] is
+/// the one in effect.
 pub const UNLOCK_ALL_NAME: &str = "UnlockAll";
+/// The profile-name limit the port uses (`layout::input::input_max_len`; the original's box takes
+/// 8). It is comfortably clear of the 100-byte `list_profiles`/`player.lst` cutoffs.
+pub const PROFILE_NAME_MAX_CHARS: usize = 16;
+
+/// The browser shell's choice for [`UNLOCK_ALL_NAME`], pinned before the first profile is loaded.
+static UNLOCK_ALL_NAME_OVERRIDE: OnceLock<String> = OnceLock::new();
+
+/// The name the port-created profile uses: [`UNLOCK_ALL_NAME`] unless the browser shell set
+/// another one with [`set_unlock_all_name`].
+pub fn unlock_all_name() -> &'static str {
+    UNLOCK_ALL_NAME_OVERRIDE.get().map_or(UNLOCK_ALL_NAME, String::as_str)
+}
+
+/// The name the browser shell may pass (`#unlock-name`): the in-game profile box's rules.
+/// Surrounding whitespace is dropped; a name shorter than 1 or longer than
+/// [`PROFILE_NAME_MAX_CHARS`] characters, a character outside `0x20..0xFF`, `%` (a `printf` format
+/// layer) or one of the nine Windows-illegal file characters is refused.
+fn normalize_unlock_all_name(name: &str) -> Option<String> {
+    let name = name.trim();
+    if name.is_empty() || name.chars().count() > PROFILE_NAME_MAX_CHARS {
+        return None;
+    }
+    let valid = name.chars().all(|c| {
+        let code = c as u32;
+        (0x20..0xFF).contains(&code) && code != 0x25 && !matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+    });
+    valid.then(|| name.to_string())
+}
+
+/// Pin the name of the port-created profile before the save directory is read. The first valid
+/// call wins; an invalid name is refused and leaves [`UNLOCK_ALL_NAME`] in place. Repeating the
+/// same name is accepted so a retried start-up is harmless.
+pub fn set_unlock_all_name(name: &str) -> bool {
+    let Some(name) = normalize_unlock_all_name(name) else { return false };
+    match UNLOCK_ALL_NAME_OVERRIDE.get() {
+        Some(existing) => existing == &name,
+        None => UNLOCK_ALL_NAME_OVERRIDE.set(name).is_ok(),
+    }
+}
+
+/// Case-insensitive name comparison. The browser VFS lower-cases every save path
+/// (`packaging/web/vfs.mjs`), and the original's box accepts Latin-1 (`0x20..0xFF`), so ASCII
+/// folding alone is not enough.
+fn same_profile_name(a: &str, b: &str) -> bool {
+    if a.is_ascii() && b.is_ascii() { a.eq_ignore_ascii_case(b) } else { a.to_lowercase() == b.to_lowercase() }
+}
+
+/// Whether `name` is the port-created profile's name under the current configuration.
+pub fn is_unlock_all_name(name: &str) -> bool {
+    same_profile_name(name, unlock_all_name())
+}
+
 /// The driver portrait of [`UNLOCK_ALL_NAME`] — entry `0` of `ALLdrivr.fsh` (`M01`).
 ///
 /// It must stay **below 8**: a race's `.DRIVER` is the profile picture, and
@@ -84,12 +139,13 @@ impl Profile {
         let d = c.next()?.to_digit(10)? as u8;
         Some(Self { picture: d, name: c.as_str().to_string() })
     }
-    /// The name the front end shows. Only `UnlockAll` differs from the on-disk spelling: the
+    /// The name the front end shows. The unlock-all profile differs from the on-disk spelling: the
     /// browser VFS lower-cases save paths, so its stem comes back as `0unlockall` while the
-    /// profile should still read as `UnlockAll` in the chooser, the licence and the race.
+    /// profile should still read as `UnlockAll` (or the name the shell chose) in the chooser, the
+    /// licence and the race.
     pub fn display_name(&self) -> String {
         if is_unlock_all_profile(self) {
-            UNLOCK_ALL_NAME.to_string()
+            unlock_all_name().to_string()
         } else {
             self.name.clone()
         }
@@ -127,13 +183,14 @@ pub fn name_taken(dir: &Path, name: &str) -> bool {
     name.is_empty() || (0..=9).any(|d| dir.join(format!("{d}{name}.sav")).host_exists())
 }
 
-/// Whether `p` is the port-created [`UNLOCK_ALL_NAME`] profile. The name is the only marker: the
-/// `.sav` format has no field for it, and an original-compatible save must stay readable.
+/// Whether `p` is the port-created [`UNLOCK_ALL_NAME`] (or browser-configured) profile. The name
+/// is the only marker: the `.sav` format has no field for it, and an original-compatible save must
+/// stay readable.
 pub fn is_unlock_all_profile(p: &Profile) -> bool {
     // The browser VFS lower-cases every save path (`packaging/web/vfs.mjs`), so the file that is
     // `0UnlockAll.sav` on a native filesystem comes back from `list_profiles` as `0unlockall.sav`.
-    // The marker therefore has to ignore ASCII case; `Profile::stem()` keeps the on-disk spelling.
-    p.name.eq_ignore_ascii_case(UNLOCK_ALL_NAME)
+    // The marker therefore has to ignore case; `Profile::stem()` keeps the on-disk spelling.
+    is_unlock_all_name(&p.name)
 }
 
 /// The career [`UNLOCK_ALL_NAME`] is created with: the last chronicle year (every track record
@@ -149,19 +206,20 @@ pub fn unlock_all_career() -> Career {
     c
 }
 
-/// Create `<dir>/0UnlockAll.sav` once, without touching `player.lst` (the profile is offered in
-/// the chooser, not selected automatically). An existing profile under **any** picture digit is
-/// kept as it is, including its progress; deleting it makes the next start create it again.
+/// Create `<dir>/<picture><name>.sav` once, without touching `player.lst` (the profile is offered
+/// in the chooser, not selected automatically). The name is [`unlock_all_name`]. An existing
+/// profile under **any** picture digit is kept as it is, including its progress; deleting it makes
+/// the next start create it again.
 pub fn ensure_unlock_all_profile(dir: &Path, tables: &CareerTables) -> std::io::Result<Option<Profile>> {
     // Match the browser's lower-cased `0unlockall.sav` and a native `0UnlockAll.sav` alike;
     // `name_taken` is case-sensitive and would miss the former on a case-sensitive filesystem.
     if list_profiles(dir).iter().any(is_unlock_all_profile) {
         return Ok(None);
     }
-    let profile = Profile::new(UNLOCK_ALL_NAME, UNLOCK_ALL_PICTURE);
+    let profile = Profile::new(unlock_all_name(), UNLOCK_ALL_PICTURE);
     let save = career_to_sav(&unlock_all_career(), tables, &profile);
     write_profile_file(dir, &profile, &save)?;
-    tracing::info!(path = %profile.path(dir).display(), picture = profile.picture, "created the UnlockAll profile");
+    tracing::info!(path = %profile.path(dir).display(), picture = profile.picture, "created the unlock-all profile");
     Ok(Some(profile))
 }
 
@@ -1483,5 +1541,23 @@ mod tests {
         delete_profile(&dir, &Profile::new("Mike", 4)).unwrap();
         assert_eq!(list_profiles(&dir).len(), 2);
         let _ = nfs_platform::fs::remove_dir_all(&dir);
+    }
+
+    /// The browser field passes through the same rules as the in-game profile box: 1–16
+    /// characters, `0x20..0xFF`, no `%` and none of the nine Windows-illegal file characters.
+    /// The marker ignores case because the browser VFS lower-cases save paths.
+    #[test]
+    fn the_unlock_all_name_follows_the_profile_box_rules() {
+        assert_eq!(normalize_unlock_all_name(UNLOCK_ALL_NAME).as_deref(), Some(UNLOCK_ALL_NAME));
+        assert_eq!(normalize_unlock_all_name("  Nick  ").as_deref(), Some("Nick"));
+        assert_eq!(normalize_unlock_all_name("Ätna").as_deref(), Some("Ätna"), "the .sav holds Latin-1 bytes");
+        assert_eq!(normalize_unlock_all_name(&"a".repeat(PROFILE_NAME_MAX_CHARS)).map(|n| n.len()), Some(PROFILE_NAME_MAX_CHARS));
+        for bad in ["", "   ", "a/b", "a\\b", "a:b", "a*b", "a?b", "a\"b", "a<b", "a>b", "a|b", "a%b", "a\nb", "a\u{ff}", "Ник", &"a".repeat(PROFILE_NAME_MAX_CHARS + 1)] {
+            assert_eq!(normalize_unlock_all_name(bad), None, "{bad:?}");
+        }
+        assert!(is_unlock_all_name("unlockall"), "the VFS lower-cases the file stem");
+        assert!(is_unlock_all_profile(&Profile::new("UNLOCKALL", 0)));
+        assert!(!is_unlock_all_profile(&Profile::new("Nick", 0)));
+        assert_eq!(Profile::new("unlockall", 0).display_name(), UNLOCK_ALL_NAME, "the configured spelling wins");
     }
 }

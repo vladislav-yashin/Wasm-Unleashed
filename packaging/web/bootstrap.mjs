@@ -5,6 +5,7 @@ import { VirtualFileSystem } from './vfs.mjs';
 import { carPaths, gamePaths, initialPaths } from './startup-assets.mjs';
 import { apply, detectLocale, getLocale, onLocaleChange, setLocale, t } from './i18n.mjs';
 import { applyScale, storedScale } from './render-scale.mjs';
+import { applyUnlockName, normalizeUnlockName, storedUnlockName } from './unlock-all.mjs';
 import { leaveGame } from './exit-game.mjs';
 import { installNetwork } from './net.mjs';
 const status = document.querySelector('#status');
@@ -37,6 +38,25 @@ if (renderScale) {
   applyScale(renderScale.value);
   renderScale.onchange = () => { applyScale(renderScale.value); };
 }
+// The built-in unlock-all profile's name is a launch setting: the game copies
+// `globalThis.nfsUnlockName` into the save layer before it creates the profile. The field is in
+// the loader because the toolbar sits under the loader until the game has started; changing the
+// value later applies at the next start, and an existing profile is never renamed.
+const unlockName = document.querySelector('#unlock-name');
+if (unlockName) {
+  unlockName.value = applyUnlockName(storedUnlockName());
+  unlockName.oninput = () => { globalThis.nfsUnlockName = normalizeUnlockName(unlockName.value); };
+  unlockName.onchange = () => { unlockName.value = applyUnlockName(unlockName.value); };
+  unlockName.addEventListener('keydown', event => {
+    event.stopPropagation();
+    if (event.key !== 'Enter' && event.key !== 'Escape') return;
+    event.preventDefault();
+    unlockName.value = applyUnlockName(unlockName.value);
+    unlockName.blur();
+    document.querySelector('canvas')?.focus({ preventScroll: true });
+  });
+  unlockName.addEventListener('keyup', event => event.stopPropagation());
+}
 // Texts that depend on runtime state: re-render them when the locale changes.
 const dynamic = new Map();
 const say = (node, render) => { dynamic.set(node, render); node.textContent = render(); };
@@ -62,6 +82,7 @@ function showLoading(stage, key, { compact = false } = {}) {
   details.open = false;
   errorText.textContent = '';
   start.hidden = true;
+  if (unlockName) unlockName.disabled = true;
   progress.removeAttribute('value');
   count.textContent = ''; dynamic.delete(count);
   percent.textContent = '…';
@@ -117,6 +138,7 @@ const report = (error, {compact = false} = {}) => {
   details.hidden = false;
   start.hidden = false;
   start.disabled = false;
+  if (unlockName) unlockName.disabled = false;
   loader.hidden = false;
   say(start, () => t(recovery ? 'action.reload' : 'action.retry'));
   if (recovery) flush();
@@ -145,6 +167,8 @@ async function launch({ gesture = false } = {}) {
   launching = true;
   loadingFailure = null;
   start.disabled = true;
+  // Freeze the launch setting before the first await; the game reads it at wasm start-up.
+  if (unlockName) unlockName.value = applyUnlockName(unlockName.value);
   showLoading('connect', 'loading.connecting');
   try {
     // Download and compile without starting Rust: its synchronous reads need the VFS.

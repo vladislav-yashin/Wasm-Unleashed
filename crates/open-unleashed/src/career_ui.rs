@@ -249,7 +249,7 @@ impl CareerUi {
         let profile = std::env::var("NFS5_PROFILE")
             .ok()
             .map(|n| {
-                let picture = if n.eq_ignore_ascii_case(nfs_game::save::UNLOCK_ALL_NAME) { nfs_game::save::UNLOCK_ALL_PICTURE } else { nfs_game::save::DEFAULT_PICTURE };
+                let picture = if nfs_game::save::is_unlock_all_name(&n) { nfs_game::save::UNLOCK_ALL_PICTURE } else { nfs_game::save::DEFAULT_PICTURE };
                 Profile::new(n, picture)
             })
             .or_else(|| nfs_game::save::read_player_lst(&dir).and_then(|s| Profile::from_stem(&s)))

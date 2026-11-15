@@ -9,6 +9,12 @@ thread_local! {
 pub fn start() {
     let _ = tracing_subscriber::fmt().without_time().with_ansi(false).with_max_level(tracing::Level::INFO).with_writer(ConsoleWriter::default).try_init();
     std::panic::set_hook(Box::new(|panic| web_sys::console::error_1(&format!("{panic}").into())));
+    // The shell's launch setting, before anything reads the save directory: an empty value (or the
+    // smoke page) keeps the default name.
+    let unlock_name = unlock_profile_name();
+    if !unlock_name.trim().is_empty() && !nfs_game::save::set_unlock_all_name(&unlock_name) {
+        tracing::warn!(name = %unlock_name, "ignoring an invalid unlock-all profile name");
+    }
     if nfsSmoke() { smoke(); return; }
     if let Err(error) = run() { wasm_bindgen::throw_str(&format!("{error:#}")); }
 }
@@ -49,6 +55,15 @@ pub fn surface_size(size: winit::dpi::PhysicalSize<u32>) -> winit::dpi::Physical
     if s >= 1.0 { return size; }
     winit::dpi::PhysicalSize::new(((size.width as f64 * s) as u32).max(1), ((size.height as f64 * s) as u32).max(1))
 }
+
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function nfsUnlockName(){return String(globalThis.nfsUnlockName || '')}")]
+extern "C" {
+    fn nfsUnlockName() -> String;
+}
+/// The browser shell's **UnlockAll name** field (`#unlock-name`, kept in `localStorage`): the name
+/// the port-created profile gets. It is a launch setting and must be pinned before the game reads
+/// the save directory, so [`start`] applies it before `run`.
+pub fn unlock_profile_name() -> String { nfsUnlockName() }
 
 thread_local! { static RACE_RETRY: Cell<bool> = const { Cell::new(false) }; static LOADING: Cell<bool> = const { Cell::new(false) }; }
 #[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function nfsTrackReady(name){return globalThis.nfsTrackReady(name)} export function nfsPrepareTrack(name){return globalThis.nfsPrepareTrack(name)} export function nfsTakeText(){const pending=globalThis.nfsPendingText;delete globalThis.nfsPendingText;return pending || null}")]

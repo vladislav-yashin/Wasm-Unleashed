@@ -808,9 +808,10 @@ pub struct Career {
     /// Evolution finished (Modern era completed, `0x691E54`).
     #[serde(default)]
     pub evolution_complete: bool,
-    /// Port-only: the profile named `UnlockAll`. It is not stored in the `.sav`; the loader sets it
-    /// from the profile name (`save::load_profile_career`), and the dealer/track/tournament list
-    /// builders use it to show every shipped record.
+    /// Port-only: the standard unlocked profile (`save::unlock_all_name`, `UnlockAll` by default).
+    /// It is not stored in the `.sav`; the loader sets it from the profile name
+    /// (`save::load_profile_career`), and the dealer/track/tournament list builders use it to show
+    /// every shipped record.
     #[serde(skip)]
     pub unlock_all: bool,
     /// Factory Driver: result per mission (`fac+0xE8`, 1 = passed), indexed like `nfs5.fac`.

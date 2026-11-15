@@ -118,7 +118,7 @@ test-rust:
 
 test-web:
 	$(PYTHON) -m unittest discover -s tools/web -p 'test_*.py'
-	node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs packaging/web/startup-assets.test.mjs packaging/web/net.test.mjs
+	node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs packaging/web/unlock-all.test.mjs packaging/web/startup-assets.test.mjs packaging/web/net.test.mjs
 
 check-wasm:
 	$(CARGO) +$(RUST_TOOLCHAIN) check --locked -p open-unleashed --target $(WASM_TARGET)
