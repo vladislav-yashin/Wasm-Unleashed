@@ -744,7 +744,7 @@ impl App {
                 }
                 self.scene.items.clear();
                 let (lw, lh) = self.hud_logical();
-                self.scene.sprites = self.fe.race_loading.as_ref().map(|l| l.sprites(lw as f32, lh as f32)).unwrap_or_default();
+                self.scene.sprites = self.race_loading_sprites(lw, lh);
                 self.renderer = Some(r);
             }
             return;

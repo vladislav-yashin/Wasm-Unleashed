@@ -196,6 +196,8 @@ impl App {
                 loading_still: std::env::var("NFS_FE_LOADING").ok().and_then(|v| v.trim().parse().ok()),
                 race_loading: None,
                 race_loading_still: std::env::var("NFS_RACE_LOADING").ok().and_then(|v| v.trim().parse().ok()),
+                #[cfg(target_arch = "wasm32")]
+                web_track_loading: None,
                 startup_still: None,
                 strings: fe_strings,
                 layout_name: cli.layout.clone().or(fe_start),

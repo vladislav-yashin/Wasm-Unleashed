@@ -140,14 +140,13 @@ fn design_sprite(aspect: f32, tex: TextureId, [x, y, w, h]: [f32; 4], color: [f3
 }
 
 /// A rectangle of the 640×480 picture on a `width × height` target, in pixels, the picture at
-/// `((W − 640) / 2, (H − 480) / 2)` (0x53D570); the rectangle is `[x, y, w, h]`. `flip` mirrors the art left to right (0x563320).
-fn centred_sprite(width: f32, height: f32, tex: TextureId, [x, y, w, h]: [f32; 4], color: [f32; 4], flip: bool) -> Sprite {
-    let (ox, oy) = (((width as i32) / 2) as f32 - 320.0, ((height as i32) / 2) as f32 - 240.0);
+/// `offset` (pixels) and `scale`; the rectangle is `[x, y, w, h]`. `flip` mirrors the art left to right (0x563320).
+fn centred_sprite(width: f32, height: f32, tex: TextureId, [x, y, w, h]: [f32; 4], scale: f32, [ox, oy]: [f32; 2], color: [f32; 4], flip: bool) -> Sprite {
     let (u0, u1) = if flip { (1.0, 0.0) } else { (0.0, 1.0) };
     Sprite {
         texture: tex,
-        pos: [(x + ox) / width, (y + oy) / height],
-        size: [w / height, h / height],
+        pos: [(x * scale + ox) / width, (y * scale + oy) / height],
+        size: [w * scale / height, h * scale / height],
         uv_min: [u0, 0.0],
         uv_max: [u1, 1.0],
         color,
@@ -331,25 +330,50 @@ impl RaceLoading {
     /// black round it, and the bar and the players' rows sit at their design offsets inside it
     /// (the port's HiDPI mapping, 2026-10-01). `width` / `height` are the HUD's logical resolution, the window's
     /// physical size over its scale factor (the port's HiDPI mapping, not a game rule).
+    ///
+    /// A browser has no 640×480 race mode to copy into — its canvas is the viewport — so the web
+    /// call sites use [`Self::sprites_fitted`] instead.
     pub fn sprites(&self, width: f32, height: f32) -> Vec<Sprite> {
-        let mut out: Vec<Sprite> = self.surface.iter().map(|&(t, x, y, w, h, f)| centred_sprite(width, height, t, [x, y, w, h], [1.0; 4], f)).collect();
+        let (ox, oy) = (((width as i32) / 2) as f32 - 320.0, ((height as i32) / 2) as f32 - 240.0);
+        self.sprites_at(width, height, 1.0, [ox, oy])
+    }
+
+    /// The same frame with the 640×480 picture fitted into a `width × height` target: the largest
+    /// 4:3 box that fits, centred, with black round it. **Browser only** — the canvas is the
+    /// viewport rather than the original's 640×480 race mode, so the picture is scaled the way the
+    /// front end's 640×480 screens are (a platform mapping, not a game rule). The bar and the
+    /// players' rows scale and move with the art.
+    pub fn sprites_fitted(&self, width: f32, height: f32) -> Vec<Sprite> {
+        let (scale, offset) = fit(width, height);
+        self.sprites_at(width, height, scale, offset)
+    }
+
+    fn sprites_at(&self, width: f32, height: f32, scale: f32, offset: [f32; 2]) -> Vec<Sprite> {
+        let mut out: Vec<Sprite> = self.surface.iter().map(|&(t, x, y, w, h, f)| centred_sprite(width, height, t, [x, y, w, h], scale, offset, [1.0; 4], f)).collect();
         if let Some(w) = self.bar {
-            out.push(centred_sprite(width, height, self.white, [302.0, 467.0, w, 6.0], [1.0, 0xBB as f32 / 255.0, 0.0, 1.0], false));
+            out.push(centred_sprite(width, height, self.white, [302.0, 467.0, w, 6.0], scale, offset, [1.0, 0xBB as f32 / 255.0, 0.0, 1.0], false));
         }
         for row in &self.rows {
             match *row {
-                LoadingRow::Absent { x } => out.push(centred_sprite(width, height, self.white, [x, 364.0, 54.0, 64.0], [0.0, 0.0, 0.0, 1.0], false)),
+                LoadingRow::Absent { x } => out.push(centred_sprite(width, height, self.white, [x, 364.0, 54.0, 64.0], scale, offset, [0.0, 0.0, 0.0, 1.0], false)),
                 LoadingRow::Player { x, picture, w, h, progress } => {
-                    out.push(centred_sprite(width, height, picture, [x, 364.0, w, h], [1.0; 4], false));
+                    out.push(centred_sprite(width, height, picture, [x, 364.0, w, h], scale, offset, [1.0; 4], false));
                     let done = (progress * 54 / 10) as f32;
                     // 0xFF312000 for what is left, 0xFFFFBB00 for what is done (0x4A5299, 0x4A52E7)
-                    out.push(centred_sprite(width, height, self.white, [x + done, 436.0, 54.0 - done, 6.0], [0x31 as f32 / 255.0, 0x20 as f32 / 255.0, 0.0, 1.0], false));
-                    out.push(centred_sprite(width, height, self.white, [x, 436.0, done, 6.0], [1.0, 0xBB as f32 / 255.0, 0.0, 1.0], false));
+                    out.push(centred_sprite(width, height, self.white, [x + done, 436.0, 54.0 - done, 6.0], scale, offset, [0x31 as f32 / 255.0, 0x20 as f32 / 255.0, 0.0, 1.0], false));
+                    out.push(centred_sprite(width, height, self.white, [x, 436.0, done, 6.0], scale, offset, [1.0, 0xBB as f32 / 255.0, 0.0, 1.0], false));
                 }
             }
         }
         out
     }
+}
+
+/// The scale and top-left corner in pixels of the 640×480 picture fitted into a `width × height`
+/// target (the largest 4:3 box that fits, centred) — [`RaceLoading::sprites_fitted`].
+fn fit(width: f32, height: f32) -> (f32, [f32; 2]) {
+    let scale = (width / DESIGN.0).min(height / DESIGN.1).max(0.000_1);
+    (scale, [(width - DESIGN.0 * scale) * 0.5, (height - DESIGN.1 * scale) * 0.5])
 }
 
 #[cfg(test)]
@@ -366,5 +390,21 @@ mod tests {
         let bottom = ROWS.last().map(|r| r.3 + r.2).unwrap();
         assert_eq!(bottom, 480.0);
         assert_eq!((LAST_STEP as f32 * BAR_PER_STEP) as i32, 124);
+    }
+
+    #[test]
+    fn the_fitted_picture_keeps_the_design_aspect() {
+        // a 16:9 canvas: the picture fills the height and is centred with side bars
+        let (scale, [x, y]) = fit(1280.0, 720.0);
+        assert_eq!(scale, 1.5);
+        assert_eq!((scale * DESIGN.0, scale * DESIGN.1), (960.0, 720.0));
+        assert_eq!([x, y], [160.0, 0.0]);
+        // a square one: the width limits it, with bars above and below
+        let (scale, [x, y]) = fit(800.0, 800.0);
+        assert_eq!(scale, 1.25);
+        assert_eq!((scale * DESIGN.0, scale * DESIGN.1), (800.0, 600.0));
+        assert_eq!([x, y], [0.0, 100.0]);
+        // the original's own 640×480 race mode: no scaling at all
+        assert_eq!(fit(640.0, 480.0), (1.0, [0.0, 0.0]));
     }
 }

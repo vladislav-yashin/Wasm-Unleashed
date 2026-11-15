@@ -73,7 +73,9 @@ Showroom car previews similarly prepare only the displayed model families.
 These deferred loads work with existing manifests; asset repacking is not required.
 Quick races load the selected track before changing game state;
 series/career modes currently preload the remaining tracks before their first
-race. Shared animation and sky metadata are included in the bootstrap. Music archives are segmented: only the directory and per-song headers are loaded
+race. The game's own race loading screen covers that preparation — its bar follows
+the files prepared so far, and the shell hides its panel meanwhile.
+Shared animation and sky metadata are included in the bootstrap. Music archives are segmented: only the directory and per-song headers are loaded
 initially, and individual songs are fetched and verified when playback starts.
 The remaining car models are prepared before the first race because opponent and
 traffic selection is still synchronous; short sound banks remain in the initial load.
@@ -266,7 +268,10 @@ resource preparation and engine startup stages. Resource progress counts prepare
 files, not downloaded bytes; connection and engine startup remain indeterminate.
 The overlay stays up until the engine reports an intro, menu or race state.
 Loading errors expose Retry or Reload and optional technical details. Track
-preparation uses a compact panel over the game with only a status and percentage;
-it keeps Retry and optional technical details on failure without discarding the
-active game. The artwork, branding and startup steps appear only at first launch.
+preparation shows the game's own race loading screen (its era artwork, the track's
+picture and the moving bar) while the shell fetches the files; the shell's compact
+panel stays hidden then and comes back with Retry and optional technical details if
+a download fails, without discarding the active game. Its 640×480 picture is scaled
+to fit the canvas with the 4:3 aspect kept, as the front-end screens are. The
+artwork, branding and startup steps appear only at first launch.
 All loading UI strings are included in the six existing shell locales.

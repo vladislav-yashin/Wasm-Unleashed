@@ -851,6 +851,11 @@ pub(crate) struct FrontEnd {
     /// `NFS_RACE_LOADING=<step>`: draw 0x4A4A70's frame after steps 0…step instead of the screen,
     /// for a still, with the race the front end has set up
     pub(crate) race_loading_still: Option<i32>,
+    /// **Browser only.** The game's own race loading screen (0x4A4A70) while the shell fetches the
+    /// launch's files: the browser's download is the port's equivalent of the original track load,
+    /// so the bar moves with it instead of the shell's HTML panel (`App::web_track_loading_begin`).
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) web_track_loading: Option<loading::WebTrackLoading>,
     /// `NFS_FE_LOADSCRN=1`: 0x4DD600's picture instead of the screen, for a still
     pub(crate) startup_still: Option<nfs_game::layout::loading::LoadingScreen>,
     /// `FEData/Locale/FEStrings.loc` and `hud.loc` (`nfs_game::layout::load_strings`), for the

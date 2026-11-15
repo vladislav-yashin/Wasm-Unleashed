@@ -15,6 +15,20 @@ impl App {
         self.fe.loading.as_ref().map(|l| l.sprites(aspect, step)).unwrap_or_default()
     }
 
+    /// 0x4A4A70's frame as sprites for this platform's target. The original copies the 640×480
+    /// surface 1:1 into the middle of the race mode (0x53D570); a browser's canvas is the viewport
+    /// instead of that 640×480 mode, so there the same picture is fitted to the logical size the way
+    /// the front end's 640×480 screens are (`RaceLoading::sprites_fitted`) — a platform mapping.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn race_loading_sprites(&self, lw: u32, lh: u32) -> Vec<Sprite> {
+        self.fe.race_loading.as_ref().map(|l| l.sprites_fitted(lw as f32, lh as f32)).unwrap_or_default()
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn race_loading_sprites(&self, lw: u32, lh: u32) -> Vec<Sprite> {
+        self.fe.race_loading.as_ref().map(|l| l.sprites(lw as f32, lh as f32)).unwrap_or_default()
+    }
+
     /// **0x4DDA00(`step`)** — one whole loading-screen frame, drawn and presented at once, as
     /// 0x4D3420 does between the stages of its load (`controls.md` §4.165.3). It first stops the
     /// music (`MusicStop(1)`, 0x4DDA16). The port's own front-end load has no stages in 0x4D3420's
@@ -26,18 +40,24 @@ impl App {
     /// fields as 0x4D4072's (read at 0x4A4AD4…0x4A4B00 for the progress send and at 0x4A4F5F…0x4A4F9B for
     /// the `MLoading.fsh` draw: `[0x628C70]`, `+8`, `+0xBF == 0`, `+0xBE`, `+0xDC ≥ 0`), which is
     /// `NetPlay::established`.
-    fn race_loading_inputs(&self) -> nfs_game::layout::loading::RaceLoadingInputs {
+    fn race_loading_inputs(
+        &self,
+        game_type: u8,
+        track: &str,
+        mirror: bool,
+        reverse: bool,
+    ) -> nfs_game::layout::loading::RaceLoadingInputs {
         use nfs_formats::career::Era;
         nfs_game::layout::loading::RaceLoadingInputs {
-            game_type: self.fe.race_game_type.unwrap_or(self.fe.game_type),
+            game_type,
             era: self.career.as_ref().map_or(0, |c| match c.career.era {
                 Era::Classic => 1,
                 Era::Golden => 2,
                 Era::Modern => 3,
             }),
-            track: self.track.name.clone(),
-            mirror: self.mirror,
-            reverse: self.backwards,
+            track: track.to_string(),
+            mirror,
+            reverse,
             network: self.net.session.as_ref().is_some_and(|n| n.established()),
             language: u32::from(self.language),
             rows: Vec::new(),
@@ -46,7 +66,8 @@ impl App {
 
     /// One call of **0x4A4A70(`step`)** into the surface `RaceLoading` keeps.
     pub(crate) fn race_loading_step(&mut self, r: &mut Renderer, step: i32) -> bool {
-        let mut input = self.race_loading_inputs();
+        let game_type = self.fe.race_game_type.unwrap_or(self.fe.game_type);
+        let mut input = self.race_loading_inputs(game_type, &self.track.name, self.mirror, self.backwards);
         // 0x4A4AD4…0x4A4B4F: the progress record, while the screen is up (`[0x655A28]`, set by step
         // 0 and cleared by step 10), and 0x4A5149…0x4A5353: every player's row, on every call
         let active = step == 0 || (step != 10 && self.fe.race_loading.as_ref().is_some_and(|l| l.active));
@@ -73,7 +94,7 @@ impl App {
             return;
         }
         let (lw, lh) = self.hud_logical_on(r);
-        let sprites = self.fe.race_loading.as_ref().map(|l| l.sprites(lw as f32, lh as f32)).unwrap_or_default();
+        let sprites = self.race_loading_sprites(lw, lh);
         let scene = Scene { sprites, clear_color: [0.0, 0.0, 0.0, 1.0], ..Scene::default() };
         if let Err(e) = r.render(&scene, &self.camera) {
             tracing::error!(error = %e, "race loading screen render failed");
@@ -94,7 +115,7 @@ impl App {
                 std::thread::sleep(Duration::from_millis(20));
             }
             self.race_loading_step(r, -1);
-            let sprites = self.fe.race_loading.as_ref().map(|l| l.sprites(lw as f32, lh as f32)).unwrap_or_default();
+            let sprites = self.race_loading_sprites(lw, lh);
             let scene = Scene { sprites, clear_color: [0.0, 0.0, 0.0, 1.0], ..Scene::default() };
             match r.render_to_image(&scene, &self.camera, shot_geometry().0, shot_geometry().1) {
                 Ok(rgba) => {
@@ -115,6 +136,124 @@ impl App {
             && let Err(e) = r.render(&scene, &self.camera)
         {
             tracing::error!(error = %e, "loading screen render failed");
+        }
+    }
+}
+
+/// **Browser only.** The race loading screen (0x4A4A70) put up while the shell downloads the
+/// launch's files. The original draws steps 0…5 around its synchronous track load; in a browser
+/// that load is mostly the shell's download, so the bar moves with the files prepared so far
+/// (steps 0…4) and step 5 — the picture of the track itself — is shown once they are all here.
+/// The screen is drawn from the frame loop (`draw_frame`), not from `start_race`, so it is on the
+/// canvas while the download runs, before the launch's synchronous part blocks the main thread.
+#[cfg(target_arch = "wasm32")]
+pub(crate) struct WebTrackLoading {
+    /// what 0x4A4A70 reads — the game type, era, track and direction of the launch
+    inputs: nfs_game::layout::loading::RaceLoadingInputs,
+    /// the shell's download finished: the frame after this is the last one before the launch
+    ready: bool,
+    /// the step last put on the surface, so an unchanged frame is not drawn again
+    drawn: i32,
+    /// the ready frame (step 5) was drawn and the launch is asked for
+    resume_requested: bool,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl App {
+    /// Start the browser's track preparation on the game's own loading screen. The shell's HTML
+    /// panel is hidden from the first frame on (`nfsTrackScreen`) and comes back only for its
+    /// Retry / error report; this runs before any career or series state is changed, as the old
+    /// gate did.
+    pub(crate) fn web_track_loading_begin(&mut self, track: &str) {
+        let ready = crate::web::prepare_track(track);
+        // the launch's direction: a network race's host options, else the menu's rows (a series
+        // round decides its own below the gate — the difference is the step-5 picture only)
+        let (mirror, reverse) = self
+            .net
+            .race
+            .as_ref()
+            .map_or_else(
+                || self.fe.menu.as_ref().map_or((false, false), |m| (m.mirror, m.backwards)),
+                |r| (r.mirror, r.backwards),
+            );
+        self.fe.web_track_loading = Some(WebTrackLoading {
+            inputs: self.race_loading_inputs(self.fe.game_type, track, mirror, reverse),
+            ready,
+            drawn: -1,
+            resume_requested: false,
+        });
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+    }
+
+    /// The launch was asked for again: `true` when the files are here and `start_from_layout` may
+    /// go on, `false` while the download runs or while the ready frame still has to be drawn.
+    ///
+    /// The ready frame (step 5) gets a frame of its own: the launch's synchronous load is one long
+    /// JavaScript task, and a frame presented inside it is never shown. Drawing step 5 in the
+    /// previous frame loop turn keeps it on the canvas for the whole load.
+    pub(crate) fn web_track_loading_resume(&mut self) -> bool {
+        let Some(state) = self.fe.web_track_loading.as_mut() else { return true };
+        if state.ready {
+            self.fe.web_track_loading = None;
+            crate::web::track_screen(false);
+            return true;
+        }
+        if crate::web::loading() {
+            // a retry from somewhere else while the download is still running: keep waiting
+            return false;
+        }
+        state.ready = true;
+        state.drawn = -1;
+        state.resume_requested = false;
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+        false
+    }
+
+    /// One frame of the browser's track loading screen: steps 0…4 follow the shell's progress, step
+    /// 5 the finished download. It hides the shell's panel once the game's frame is up and asks for
+    /// the deferred launch after the ready frame has been presented.
+    pub(crate) fn web_track_loading_frame(&mut self) {
+        let Some((step, drawn)) = self.fe.web_track_loading.as_ref().map(|s| {
+            let step = if s.ready { 5 } else { ((crate::web::track_progress() * 5.0) as i32).min(4) };
+            (step, s.drawn)
+        }) else {
+            return;
+        };
+        let inputs = self.fe.web_track_loading.as_ref().map(|s| s.inputs.clone()).expect("checked above");
+        if step != drawn {
+            let Some(mut r) = self.renderer.take() else { return };
+            let rl = self.fe.race_loading.get_or_insert_with(|| nfs_game::layout::loading::RaceLoading::new(&mut r));
+            // step 0 activates the screen and draws the era's mosaic; later steps only move the bar
+            // (step 5 also reloads the art with the track's own picture)
+            if !rl.active || drawn < 0 {
+                rl.step(&mut r, &self.paths, 0, &inputs);
+            }
+            if step > 0 {
+                rl.step(&mut r, &self.paths, step, &inputs);
+            }
+            let (lw, lh) = self.hud_logical_on(&r);
+            let sprites = self.race_loading_sprites(lw, lh);
+            let scene = Scene { sprites, clear_color: [0.0, 0.0, 0.0, 1.0], ..Scene::default() };
+            if let Err(e) = r.render(&scene, &self.camera) {
+                tracing::error!(error = %e, "track loading screen render failed");
+            }
+            self.renderer = Some(r);
+            if let Some(s) = self.fe.web_track_loading.as_mut() {
+                s.drawn = step;
+            }
+            // the shell's panel only goes now that the game's own frame is up (and again if a
+            // failed download's Retry put it back)
+            crate::web::track_screen(true);
+        }
+        if let Some(s) = self.fe.web_track_loading.as_mut() {
+            if s.ready && !s.resume_requested {
+                s.resume_requested = true;
+                crate::web::request_race_retry();
+            }
         }
     }
 }

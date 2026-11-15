@@ -367,7 +367,8 @@ impl ApplicationHandler for App {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         #[cfg(target_arch = "wasm32")]
-        if crate::web::loading() && matches!(event, WindowEvent::KeyboardInput {..} | WindowEvent::MouseInput {..} | WindowEvent::Touch(_)) { return; }
+        if (crate::web::loading() || self.fe.web_track_loading.is_some())
+            && matches!(event, WindowEvent::KeyboardInput {..} | WindowEvent::MouseInput {..} | WindowEvent::Touch(_)) { return; }
         #[cfg(target_arch = "wasm32")]
         if matches!(event, WindowEvent::KeyboardInput { .. } | WindowEvent::MouseInput { .. } | WindowEvent::Touch(_)) {
             if let Some(audio) = &self.snd.audio { audio.resume_browser(); }

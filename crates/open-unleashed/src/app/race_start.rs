@@ -504,7 +504,18 @@ impl App {
                         _ => String::new(),
                     }
                 });
-            if !crate::web::prepare_track(&track) { return; }
+            if self.fe.web_track_loading.is_some() {
+                // The browser's track preparation was asked for again (`RACE_RETRY`): go on once the
+                // ready frame has been on the canvas for its own turn — the launch's synchronous
+                // load is one long task and nothing drawn inside it is shown.
+                if !self.web_track_loading_resume() { return; }
+            } else {
+                // The game's own race loading screen (0x4A4A70) stands in for the shell's panel
+                // while it downloads the launch's files; `start_from_layout` runs again when they
+                // are here.
+                self.web_track_loading_begin(&track);
+                return;
+            }
         }
 
         // `Game.GameType` 10 — `VictoryRoom`'s `PLAYGAME` — is the era finale (0x4D5730's type-10

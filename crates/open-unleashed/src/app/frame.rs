@@ -9,6 +9,14 @@ impl App {
     // PORT-DEVIATION D5 (RE/notes/PORT-DEVIATIONS.md): NFS_RENDER_THREAD=1 moves encode/submit/present to a thread, off by default; the original renders through dx7z.dll on its main thread.
     pub(crate) fn draw_frame(&mut self) {
         #[cfg(target_arch = "wasm32")]
+        if self.fe.web_track_loading.is_some() {
+            // The shell is fetching the launch's files: the game's own race loading screen stands
+            // in for the front end (and for the shell's HTML panel) until the launch can go on.
+            self.web_track_loading_frame();
+            if let Some(window) = &self.window { window.request_redraw(); }
+            return;
+        }
+        #[cfg(target_arch = "wasm32")]
         if crate::web::loading() {
             if let Some(window) = &self.window { window.request_redraw(); }
             return;

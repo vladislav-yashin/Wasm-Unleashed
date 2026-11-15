@@ -75,6 +75,9 @@ pub fn touch_bottom() -> f32 { nfsTouchBottom() }
 
 pub fn loading() -> bool { LOADING.with(Cell::get) }
 pub fn take_race_retry() -> bool { RACE_RETRY.with(|r| r.replace(false)) }
+/// Ask for another `start_from_layout`: the shell's download finishing and the ready frame being
+/// presented both defer the launch by one frame-loop turn.
+pub fn request_race_retry() { RACE_RETRY.with(|r| r.set(true)); }
 pub fn prepare_track(name: &str) -> bool {
     if nfsTrackReady(name) { return true; }
     if LOADING.with(|s| s.replace(true)) { return false; }
@@ -89,6 +92,18 @@ pub fn prepare_track(name: &str) -> bool {
     });
     false
 }
+
+/// The shell's own track panel: `true` hides it while the game draws 0x4A4A70 itself, `false` lets
+/// it take over again (its Retry / error report shows it regardless).
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function nfsTrackScreen(active){globalThis.nfsTrackScreen?.(active)} export function nfsTrackProgress(){return globalThis.nfsTrackProgress?.() ?? 0}")]
+extern "C" {
+    fn nfsTrackScreen(active: bool);
+    fn nfsTrackProgress() -> f64;
+}
+pub fn track_screen(active: bool) { nfsTrackScreen(active) }
+/// The share of the launch's files the shell has prepared so far, 0…1 (`fs.preload` in
+/// `packaging/web/bootstrap.mjs`).
+pub fn track_progress() -> f64 { nfsTrackProgress().clamp(0.0, 1.0) }
 
 thread_local! { static MEDIA_RETRY: Cell<bool> = const { Cell::new(false) }; }
 #[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function nfsFilesReady(paths){return globalThis.nfsFilesReady(paths)} export function nfsPrepareFiles(paths){return globalThis.nfsPrepareFiles(paths)}")]

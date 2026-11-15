@@ -15,6 +15,17 @@ const saveStatus = document.querySelector('#save-status');
 installNetwork();
 setLocale(detectLocale(), { persist: false });
 apply();
+// The game draws the original race loading screen (0x4A4A70) while the shell fetches a launch's
+// track files. `nfsTrackScreen` hides this panel then — it comes back by itself for an error and
+// its Retry — and `nfsTrackProgress` is the share of the files prepared, which moves that
+// screen's bar.
+let trackProgress = 0;
+globalThis.nfsTrackProgress = () => trackProgress;
+globalThis.nfsTrackScreen = active => {
+  if (!active) return;
+  loader.hidden = true;
+  loader.setAttribute('aria-busy', 'false');
+};
 const language = document.querySelector('#language');
 language.value = getLocale();
 language.onchange = () => { setLocale(language.value); };
@@ -164,11 +175,13 @@ async function launch({ gesture = false } = {}) {
     const raceCars = carPaths(fs.source.manifest.files);
     const trackPaths = name => [...raceCars, ...tracks.filter(path => sharedTrack(path) || !name || path.split('/').at(-1).startsWith(name.toLowerCase()))];
     globalThis.nfsTrackReady = name => trackPaths(name).every(path => fs.files.has(`game/${path}`));
-    const prepareResources = async (paths, key) => {
+    const prepareResources = async (paths, key, progress = showProgress) => {
       while (true) {
         showLoading('resources', key, {compact:true});
         try {
-          await fs.preload(paths, showProgress);
+          trackProgress = 0;
+          await fs.preload(paths, progress);
+          trackProgress = 1;
           finishLoading();
           return;
         } catch(error) {
@@ -177,7 +190,13 @@ async function launch({ gesture = false } = {}) {
         }
       }
     };
-    globalThis.nfsPrepareTrack = name => prepareResources(trackPaths(name), 'loading.track');
+    // The track's own screen moves its bar with the files prepared so far (0x4A4A70's steps), so
+    // the shell reports the share instead of drawing its compact panel over the game.
+    const showTrackProgress = (done, total) => {
+      trackProgress = total ? done / total : 0;
+      showProgress(done, total);
+    };
+    globalThis.nfsPrepareTrack = name => prepareResources(trackPaths(name), 'loading.track', showTrackProgress);
     globalThis.nfsFilesReady = paths => gamePaths(paths).every(path => fs.files.has(`game/${path}`));
     globalThis.nfsPrepareFiles = paths => prepareResources(gamePaths(paths), 'loading.assets');
     const initial = initialPaths(fs.source.manifest.files);
