@@ -4,4 +4,12 @@
 !packaging/
 !packaging/web/
 !packaging/web/Dockerfile
+!packaging/web/relay.Dockerfile
 !packaging/web/nginx.conf
+# The relay image is compiled from source in its build stage.
+!Cargo.toml
+!Cargo.lock
+!crates/
+!crates/**
+!tools/
+!tools/**

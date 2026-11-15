@@ -28,7 +28,7 @@ subprocess.run(command, cwd=root, check=True)
 output = root / 'dist'
 output.mkdir(exist_ok=True)
 build_landing(output, args.site_url)
-for name in ['smoke.html', 'style.css', 'bootstrap.mjs', 'startup-assets.mjs', 'controls.mjs', 'fullscreen.mjs', 'render-scale.mjs', 'exit-game.mjs', 'assets.mjs', 'vfs.mjs', 'i18n.mjs']:
+for name in ['smoke.html', 'style.css', 'bootstrap.mjs', 'startup-assets.mjs', 'controls.mjs', 'fullscreen.mjs', 'render-scale.mjs', 'exit-game.mjs', 'assets.mjs', 'vfs.mjs', 'i18n.mjs', 'net.mjs']:
     shutil.copyfile(root / 'packaging/web' / name, output / name)
 subprocess.run([args.wasm_bindgen, '--target', 'web', '--out-dir', str(output / 'pkg'),
                 '--out-name', 'open_unleashed', str(root / 'target/wasm32-unknown-unknown' / ('debug' if args.debug else 'release') / 'open-unleashed.wasm')], check=True)

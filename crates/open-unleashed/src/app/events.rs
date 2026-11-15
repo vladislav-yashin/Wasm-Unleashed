@@ -1,6 +1,7 @@
 //! The winit event handlers: window events, the intro's event path and the application handler.
 
 use crate::*;
+use super::fe_callbacks::InputReturn;
 
 impl App {
     /// The window's events while the start-up movies play: the player reads the keyboard ring for
@@ -325,7 +326,10 @@ impl ApplicationHandler for App {
             } else if let Some(index) = self.fe.layout_preview.as_ref().and_then(|layout| layout.focused_input()) {
                 if let Some(layout) = self.fe.layout_preview.as_mut() { while layout.backspace(index) {} }
                 for c in text.chars() { self.fe_input_key(index, c); }
-                if commit { if let Some(layout) = self.fe.layout_preview.as_mut() { let _ = layout.commit_input(index); } }
+                // the HTML field's Return is the focused box's Return: the chat box sends through
+                // `NetPlay::say` (0x4C3310), the address box commits into `Comms.IPList` (0x4C2120),
+                // an ordinary box commits (0x4CCC20) — the same `App::fe_input_return` the key path uses
+                if commit { self.fe_input_return(index); }
                 self.bind_player_buttons();
             }
         }
@@ -378,6 +382,10 @@ impl ApplicationHandler for App {
             }
             return;
         }
+        #[cfg(target_arch = "wasm32")]
+        if matches!(event, WindowEvent::RedrawRequested) {
+            self.net_wasm_step(event_loop);
+        }
         self.net_leaving_step();
         if self.idle_movie_due && self.intro.is_none() {
             self.start_idle_movie();
@@ -424,8 +432,12 @@ impl ApplicationHandler for App {
             // because macOS (Cmd+Shift+5 overlay) can hand back a synthetic press for a key whose release was
             // swallowed — PORT-DEVIATION D17 (remainder, FOCUS-INPUT).
             WindowEvent::Focused(focused) => {
+                // The browser shell pauses a single-player race when the page loses focus, but a
+                // network race has to keep running: the host goes on and a client that stops
+                // polling for a second is classified as gone (`0x490140`, `NetPlay::retired`),
+                // which leaves this car out of the race for good.
                 #[cfg(target_arch = "wasm32")]
-                if !focused && self.vehicle.is_some() { self.paused = true; }
+                if !focused && self.vehicle.is_some() && self.net.session.is_none() { self.paused = true; }
                 let _ = focused;
                 self.input.release_all();
                 // PORT-DEVIATION D46: photo mode's own held keys too
@@ -527,38 +539,15 @@ impl ApplicationHandler for App {
                     use winit::keyboard::{Key, NamedKey};
                     let mut took = false;
                     match event.logical_key.as_ref() {
-                        // the chat box's own Return, 0x4C3310 (`netplay::NetPlay::say`)
-                        Key::Named(NamedKey::Enter)
-                            if let Some(text) = self.fe.layout_preview.as_mut().and_then(|l| l.take_chat(i)) =>
-                        {
-                            let empty = self.fe.strings.get(287).unwrap_or_default().to_string();
-                            if let Some(n) = self.net.session.as_mut() {
-                                n.say(&text, &empty);
-                            }
-                            took = true;
-                        }
-                        // `NFS5.CHARVECTACCESSORINPUTBOX`'s own Return, slot 4 **0x4C2120** (in
-                        // place of 0x4CCC20): a non-empty string goes into the list accessor at
-                        // row 0 (0x4B8B70 with 0, the list's front) and the list selects row 0
-                        // (slot 0x2C(0), 0x4C21B8); then `data.callback` when there is one
-                        // (0x50D6D0 — empty on both shipped boxes), else the string's commit
-                        // (slot 0x0C); focus off (0x4C7DA0), the update, and **no sound**. The
-                        // port's `Comms.IPList` is the lobby's own list, whose row 0 is the typed
-                        // address — so the address becomes `Comms.IP` and the selection 0.
-                        Key::Named(NamedKey::Enter)
-                            if self.fe.layout_preview.as_ref().and_then(|l| l.class_of(i)).as_deref() == Some("NFS5.CHARVECTACCESSORINPUTBOX") =>
-                        {
-                            self.fe_charvect_return(i);
-                            return;
-                        }
-                        Key::Named(NamedKey::Enter) => {
-                            if let Some(l) = self.fe.layout_preview.as_mut()
-                                && let Some((name, text)) = l.commit_input(i)
-                            {
-                                tracing::info!(accessor = %name, value = %text, "input box committed");
-                                took = true;
-                            }
-                        }
+                        // the chat box's 0x4C3310, the list box's 0x4C2120 and an ordinary box's
+                        // 0x4CCC20 — `App::fe_input_return`, which the browser's text field shares
+                        Key::Named(NamedKey::Enter) => match self.fe_input_return(i) {
+                            InputReturn::Chat | InputReturn::Box => took = true,
+                            // 0x4C2120 leaves through its own handler: no sound, and it binds the
+                            // lists itself
+                            InputReturn::List => return,
+                            InputReturn::None => {}
+                        },
                         Key::Named(NamedKey::Backspace) => {
                             took = self.fe.layout_preview.as_mut().is_some_and(|l| l.backspace(i));
                         }
@@ -896,15 +885,31 @@ impl ApplicationHandler for App {
                 self.frame_dt = (now - self.last_frame).as_secs_f32();
                 self.last_frame = now;
                 self.draw_frame();
-                if std::mem::take(&mut self.net.start_due) && self.net_playgame() {
-                    self.net_launch_sync();
-                    self.start_from_layout(event_loop);
+                if std::mem::take(&mut self.net.start_due) {
+                    #[cfg(target_arch = "wasm32")]
+                    self.net_start_begin();
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if self.net_playgame() {
+                        self.net_launch_sync();
+                        self.start_from_layout(event_loop);
+                    }
                 }
             }
             // the program is ending (a playback's end with no front end, `replay_exit_check`):
             // no more race frames
             WindowEvent::RedrawRequested if event_loop.exiting() => {}
             WindowEvent::RedrawRequested => {
+                // The browser started the race frame before the room's `0xC5` could arrive (it
+                // cannot block); wait here, where the frame loop keeps the WebSocket alive. The
+                // hold carries `wait_go`'s D12 glue: past [`netplay::BARRIER_LIMIT`] the frames go
+                // on, as the native loop's `break` does.
+                #[cfg(target_arch = "wasm32")]
+                if self.net.session.as_mut().is_some_and(|n| n.go_hold()) {
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
+                    return;
+                }
                 self.gamepads.poll(&mut self.input);
                 if self.gamepads.take_pad_hotplug() {
                     self.pad_layout_if_untouched();

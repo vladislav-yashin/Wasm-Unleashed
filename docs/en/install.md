@@ -48,8 +48,28 @@ request), the game keeps progress for the current page only. Export the saves be
 
 ## Network games
 
-Browser multiplayer is planned for a later stage. Network races, LAN discovery and the original UDP protocol
-are not available in the browser build yet, so no firewall ports need to be opened.
+A browser can join a network game hosted by the native game at an IPv4 address. Browsers cannot send UDP,
+so the page opens a WebSocket to the relay at `/relay` on the same site (or the `?relay=` address);
+`nfs-relay` forwards the original protocol to the host's UDP port 9442. The host sees every browser
+player as an ordinary UDP client, so a native host can mix native and browser players.
+
+1. Start the relay: `make serve` locally starts it and proxies `/relay` automatically; the Docker
+   deployment does the same through nginx. A standalone relay is available with `make relay`.
+2. In the game open **Multiplayer → Peer-to-Peer IP**, type the host's address and choose **CONNECT**.
+3. When the lobby appears, choose a car, press **READY**, and the host starts the race.
+
+Keep the game tab visible while the race runs: browsers throttle hidden tabs, the page stops
+polling, and the host treats the player as gone. Switching to another window does not pause a
+network race (a single-player race still pauses on focus loss).
+
+Browser hosting, the LAN games list and the modem screen are not available; the browser build disables
+those buttons. The relay only reaches the configured UDP port (9442 by default) and only global unicast
+addresses: loopback, link-local, private networks, carrier-grade NAT and the other special-purpose
+ranges are refused, and a LAN deployment opens them explicitly with `RELAY_ALLOW_CIDRS` or
+`RELAY_ALLOW_PRIVATE=1`. The relay must itself be able to reach the host. Over the internet the host
+needs the same UDP 9442 port forwarding as for a native player. Operators set `RELAY_ALLOWED_ORIGINS`
+to the public site and keep the per-address limits and the bandwidth budget in place; the threat model
+is in [the web deployment guide](../../packaging/web/DEPLOY.md#relay-threat-model).
 
 ## If something goes wrong
 

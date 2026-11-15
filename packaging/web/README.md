@@ -113,11 +113,15 @@ frame. It is a platform setting and independent of the game's own `Graphics` scr
 that screen's `Resolutions` list has one row (the canvas) and cannot change the page's size.
 Browser audio uses CPAL's Web Audio output, with asynchronous music feeding and
 resume on user interaction. It does not yet use a dedicated AudioWorklet mixer.
-Wheel force feedback and network sessions are unavailable in the web version. Controller rumble
-is driven through the browser's Gamepad API in Chrome, Edge and Safari 16.4+; Firefox does not
-expose gamepad rumble yet. The pad does not buzz with the engine: rough shoulders, verges and grass
-rumble, tyre scrub and wheelspin are felt near the grip limit, locked front wheels pulse while
-braking, and a gear change gives a short kick.
+Wheel force feedback is unavailable in the web version. Network sessions can join a native game
+host at an IPv4 address through the relay described below; hosting and LAN discovery remain native.
+Keep the game tab visible while a network race runs: browsers throttle a hidden tab, the game stops
+polling, and the host classifies the player as gone. Switching to another window no longer pauses a
+network race (a single-player race still pauses).
+Controller rumble is driven through the browser's Gamepad API in Chrome, Edge and Safari 16.4+;
+Firefox does not expose gamepad rumble yet. The pad does not buzz with the engine: rough shoulders,
+verges and grass rumble, tyre scrub and wheelspin are felt near the grip limit, locked front wheels
+pulse while braking, and a gear change gives a short kick.
 
 ## Interface language
 
@@ -139,9 +143,9 @@ the shell does not retranslate them.
 
 ```sh
 cargo +stable check -p open-unleashed --target wasm32-unknown-unknown --locked
-cargo +stable test -p nfs-formats -p nfs-net --lib
+cargo +stable test -p nfs-formats -p nfs-net --lib -p nfs-relay
 python3 -m unittest discover -s tools/web -p 'test_*.py'
-node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs packaging/web/exit-game.test.mjs packaging/web/startup-assets.test.mjs
+node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs packaging/web/exit-game.test.mjs packaging/web/startup-assets.test.mjs packaging/web/net.test.mjs
 ```
 
 For Firefox frame-pacing investigations, pass `--profile-webgl` to
@@ -154,8 +158,55 @@ only enabled by this diagnostic option; it is not part of the shipped game.
 Remaining acceptance: a complete quick race, career and mission, audio continuity,
 mobile memory/performance, context loss/recovery and persistent save round trips
 on real browsers with full original resources. Browser photos download the current canvas resolution.
-Future multiplayer needs a WebSocket transport and a UDP gateway; the existing
-wire protocol remains separate from browser asset delivery.
+
+## Network play
+
+A browser cannot open a UDP socket, so the browser build speaks the original protocol through a
+WebSocket. `nfs-relay` (`tools/net-relay`) accepts `/relay?target=ip:port`, validates the target,
+opens one connected UDP socket to the game host's port 9442 and forwards the datagrams unchanged.
+One WebSocket is one peer: the host sees each browser player as an ordinary UDP client.
+
+The peer-to-peer screen (`PeerToPeerIP` → `Comms.IP` → `CONNECT`) is the supported path. `CREATE`,
+the LAN games list and the modem screen stay native-only; the browser disables those buttons. The
+typed destination must be an IPv4 literal (there is no browser DNS lookup on this path).
+
+Locally, `make serve` builds and starts the relay and proxies `/relay` to it, so the page's
+same-origin WebSocket URL works without a query parameter:
+
+```sh
+make serve
+# open http://127.0.0.1:8080/game.html
+```
+
+The relay's default policy refuses loopback and private addresses; the development server passes
+`--allow-loopback --allow-private` for this local case only. To reach a native host on another
+machine, use its LAN address. Inside Docker, `127.0.0.1` means the relay container itself, so use
+the host's LAN address (or run the relay natively for a same-machine test).
+
+`python3 tools/web/serve.py` without `--relay` is still a plain static server. To use a standalone
+relay instead, run `make relay` and point the page at it explicitly:
+
+```sh
+make relay
+python3 tools/web/serve.py
+# open http://127.0.0.1:8080/game.html?relay=ws://127.0.0.1:8090/relay
+```
+
+`--relay-port` makes the built-in proxy point at an existing relay without starting one.
+
+The Docker stack (`make docker-up`) builds the relay and nginx proxies same-origin `/relay` to it,
+so no query parameter is needed. The browser always uses `wss:` on an HTTPS page.
+
+Operators must set `RELAY_ALLOWED_ORIGINS` to the site's origin. The relay only forwards to the
+configured UDP port (9442 by default) and to global unicast addresses: loopback, link-local, private
+networks, carrier-grade NAT and the other special-purpose ranges are refused unless the operator
+names a `RELAY_ALLOW_CIDRS` allowlist (which replaces that rule) or sets `RELAY_ALLOW_PRIVATE=1`.
+Connection, per-address, per-destination, packet-rate and bandwidth limits bound what one client and
+the deployment as a whole can spend; an address may also open WebSockets only at
+`RELAY_MAX_UPGRADES_PER_SEC`. `RELAY_TRUSTED_PROXIES` is the only reason a forwarded address
+is believed. The relay must be able to reach the host's UDP port; over the internet the host needs
+the same port forwarding a native client would. The threat model is in
+[`DEPLOY.md`](DEPLOY.md#relay-threat-model).
 
 
 ## Landing page and SEO

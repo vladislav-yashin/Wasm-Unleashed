@@ -36,17 +36,18 @@ jobs:
         run: cargo check --locked -p open-unleashed --target wasm32-unknown-unknown
 
       - name: Run Rust tests
-        run: cargo test --locked -p nfs-formats -p nfs-net --lib
+        run: cargo test --locked -p nfs-formats -p nfs-net --lib -p nfs-relay
 
       - name: Run web tooling tests
         run: python3 -m unittest discover -s tools/web -p 'test_*.py'
 
       - name: Run browser module tests
-        run: node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs packaging/web/startup-assets.test.mjs
+        run: node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs packaging/web/startup-assets.test.mjs packaging/web/net.test.mjs
 
       - name: Validate deployment files
         env:
           OPEN_UNLEASHED_IMAGE: ghcr.io/example/open-unleashed@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          OPEN_UNLEASHED_RELAY_IMAGE: ghcr.io/example/open-unleashed-relay@sha256:0000000000000000000000000000000000000000000000000000000000000000
         run: |
           set -euo pipefail
           python3 packaging/web/deploy/generate-setup.py --check
@@ -191,9 +192,86 @@ jobs:
           docker exec "$name" rm -f /tmp/draining
           curl --fail --silent --show-error http://127.0.0.1:18080/healthz >/dev/null
 
+  relay-image:
+    name: Build and push relay image
+    needs: web
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.name }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compute image name
+        id: meta
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}-relay" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: packaging/web/relay.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.name }}:sha-${{ github.sha }}
+            ${{ steps.meta.outputs.name }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=relay
+          cache-to: type=gha,mode=max,scope=relay
+
+      - name: Smoke test relay image
+        env:
+          IMAGE: ${{ steps.meta.outputs.name }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          name="open-unleashed-relay-smoke-${GITHUB_RUN_ID}"
+          cleanup() { docker rm --force "$name" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+
+          docker run --detach --name "$name" \
+            --read-only \
+            --security-opt no-new-privileges:true \
+            --publish 127.0.0.1:18090:8090 \
+            "$IMAGE" >/dev/null
+
+          ready=0
+          for _ in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:18090/healthz >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$ready" -ne 1 ]]; then
+            docker logs "$name" >&2 || true
+            exit 1
+          fi
+
   deploy:
     name: Deploy to production
-    needs: image
+    needs: [image, relay-image]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -226,6 +304,7 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           IMAGE: ${{ needs.image.outputs.image }}@${{ needs.image.outputs.digest }}
+          RELAY_IMAGE: ${{ needs['relay-image'].outputs.image }}@${{ needs['relay-image'].outputs.digest }}
         run: |
           set -euo pipefail
           umask 077
@@ -235,6 +314,7 @@ jobs:
           : "${DEPLOY_SSH_KEY:?DEPLOY_SSH_KEY is required}"
           : "${DEPLOY_KNOWN_HOSTS:?DEPLOY_KNOWN_HOSTS is required}"
           : "${IMAGE:?image digest is required}"
+          : "${RELAY_IMAGE:?relay image digest is required}"
           port="${DEPLOY_SSH_PORT:-22}"
 
           key="$RUNNER_TEMP/deploy_key"
@@ -254,4 +334,4 @@ jobs:
             -o GlobalKnownHostsFile=/dev/null \
             -o ConnectTimeout=20 \
             -o ServerAliveInterval=30 \
-            "$DEPLOY_USER@$DEPLOY_HOST" "deploy $IMAGE"
+            "$DEPLOY_USER@$DEPLOY_HOST" "deploy $IMAGE $RELAY_IMAGE"

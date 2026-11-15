@@ -1,0 +1,19 @@
+[package]
+name = "nfs-relay"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WebSocket to UDP relay for browser network games"
+
+[dependencies]
+nfs-net.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "net", "time", "signal", "sync"] }
+axum = { version = "0.8", features = ["ws"] }
+
+[dev-dependencies]
+tokio-tungstenite = "0.30"
+futures-util = "0.3"

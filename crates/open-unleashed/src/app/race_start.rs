@@ -462,6 +462,17 @@ impl App {
     /// network half (`net_launch_sync`) in front of it. **The order is the original's**: `0xB3`, then
     /// the stream (`0xBC`), then the barrier (`0xBD`).
     pub(crate) fn fe_start_game(&mut self, event_loop: &ActiveEventLoop) {
+        // A browser cannot run the blocking barriers: the host's `0xB3`/`0xBD` rounds need the
+        // WebSocket's event loop, so the sequence is advanced from `net_wasm_step` instead. Any
+        // network session takes this path — an unestablished one must not fall through to the
+        // native `net_playgame`/`net_launch_sync`, whose waits trap on the browser's main thread.
+        #[cfg(target_arch = "wasm32")]
+        if self.net.session.is_some() {
+            if self.net.session.as_ref().is_some_and(|n| n.established()) {
+                self.net_start_begin();
+            }
+            return;
+        }
         // the original's order (`network.md` §11.7): the room's `0xB3` (0x48BF10) first, then each
         // machine's launch - 0x4B4DA0 sends the stream and runs the barrier 0x48D6A0
         if !self.net_playgame() {
@@ -474,13 +485,25 @@ impl App {
     pub(crate) fn start_from_layout(&mut self, event_loop: &ActiveEventLoop) {
         #[cfg(target_arch = "wasm32")]
         {
-            // Gate before any career/series mutation. Multi-event modes preload all tracks
-            // so subsequent round transitions remain synchronous and deterministic.
-            let track = if self.fe.game_type == game_type::QUICK_KNOCKOUT {
-                self.fe.menu.as_ref().map(|m| m.looped_track().to_string()).unwrap_or_default()
-            } else if self.fe.game_type == 0 {
-                self.fe.menu.as_ref().map(|m| m.track().to_string()).unwrap_or_default()
-            } else { String::new() };
+            // Gate before any career/series mutation. A network launch has the host's track in
+            // `net.race`; the quick flows' tracks are the menu's. A multi-event launch decides
+            // its track below the gate (a tournament's event, a mission, a knockout's round rows
+            // — 0x4ED5D0's arms), so the empty name preloads every track for it, keeping the
+            // round transitions synchronous as the gate has always done.
+            let track = self
+                .net
+                .race
+                .as_ref()
+                .and_then(|r| r.track.clone())
+                .unwrap_or_else(|| {
+                    let m = self.fe.menu.as_ref();
+                    match self.fe.game_type {
+                        game_type::QUICK_KNOCKOUT => m.map_or_else(String::new, |m| m.looped_track().to_string()),
+                        // the single race (0x4D5730's type-0 arm) races the menu's track
+                        0 => m.map_or_else(String::new, |m| m.track().to_string()),
+                        _ => String::new(),
+                    }
+                });
             if !crate::web::prepare_track(&track) { return; }
         }
 

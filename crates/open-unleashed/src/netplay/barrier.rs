@@ -103,6 +103,7 @@ impl NetPlay {
     /// **The race frame's wait, 0x4152E0** (`while (… +0xC4 != 0) 0x4B0FA0`): pump until the room's first
     /// `0xC5` has cleared `+0xC4`. The loop's condition is the connection up and `+0xC4` set, so it
     /// also ends when the link goes. [`BARRIER_LIMIT`] is the D12 glue (PORT-DEVIATIONS.md, 0x4152E0 has no limit).
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn wait_go(&mut self) {
         let end = Instant::now() + BARRIER_LIMIT;
         while self.go_wait && self.established() && !self.lost {
@@ -119,6 +120,15 @@ impl NetPlay {
     /// +0x48 = +0x4C = −1` — the finish times of an earlier race, and the race indices.
     pub fn launch_begin(&mut self) -> bool {
         let passed = self.launch_barrier();
+        self.launch_reset();
+        passed
+    }
+
+    /// The body of 0x48D3D0 **after** its barrier. Split out for the browser: its first launch
+    /// barrier is driven from the frame loop, and only its passing may reset the counters and send
+    /// the launch records (the native [`Self::launch_begin`] keeps the barrier and this body
+    /// together).
+    pub fn launch_reset(&mut self) {
         for p in &mut self.room.players {
             p.time = -1;
             p.progress = -1;
@@ -127,6 +137,5 @@ impl NetPlay {
         // 0x4B4DB6 `memset(0x6573E8, 0, 0x3E24)` clears `[0x658608 + slot·0x580]` with the rest of the
         // option block (the port refills the other tables from the stream and keeps them as they are)
         self.launch.progress.clear();
-        passed
     }
 }

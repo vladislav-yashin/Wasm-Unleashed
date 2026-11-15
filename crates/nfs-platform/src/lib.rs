@@ -3,6 +3,9 @@
 pub use std::fs;
 #[cfg(target_arch = "wasm32")]
 pub mod fs;
+/// The browser's WebSocket bridge to the UDP relay (`packaging/web/net.mjs`).
+#[cfg(target_arch = "wasm32")]
+pub mod net;
 #[cfg(not(target_arch = "wasm32"))]
 pub use std::time;
 #[cfg(target_arch = "wasm32")]

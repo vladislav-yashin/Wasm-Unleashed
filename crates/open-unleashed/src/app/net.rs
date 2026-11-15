@@ -2,6 +2,8 @@
 
 use crate::*;
 use nfs_physics::vehicle::RaceState;
+#[cfg(target_arch = "wasm32")]
+use crate::netplay::{BarrierJob, NetStart};
 
 impl App {
     /// **`HInfo`'s tick 0x427C70** for a network race (`[0x6573E8] == 3`; the HUD tick 0x425950 calls it at
@@ -881,8 +883,38 @@ impl App {
             stream.extend(grid);
             n.send_launch(&stream);
         }
-        use nfs_net::options::id as opt;
         let passed = n.launch_barrier();
+        self.net_race_settle(host, settings.as_ref());
+        tracing::info!(target: "netplay", host, passed, "network launch barrier (0x4B4DA0)");
+    }
+
+    /// The browser's half of [`Self::net_launch_sync`] **after 0x48D3D0's barrier**: the reset body,
+    /// this player's own slot records (the host's broadcast bands are not its) and the barrier that
+    /// follows the stream. The first barrier is driven by `NetStart::LaunchFirst`; calling
+    /// `launch_begin` here would run its blocking `launch_barrier` on the browser main thread.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn net_launch_send_records(&mut self) -> Option<netplay::BarrierRun> {
+        let own_car = self.net_own_launch_car();
+        let n = self.net.session.as_mut().filter(|n| n.established())?;
+        n.launch_reset();
+        let recs = own_car.as_ref().map(|c| n.own_launch_records(c)).unwrap_or_default();
+        n.send_launch(&recs);
+        n.barrier_begin()
+    }
+
+    /// The browser's [`Self::net_race_settle`] after its launch barrier passed. The host's stream
+    /// precedes its `0xBD` on the same link, so the records are in by this point.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn net_launch_finish(&mut self) {
+        self.net_race_settle(false, None);
+    }
+
+    /// The records the launch barrier left in the session, as the race's options. Split out of
+    /// [`Self::net_launch_sync`] so the browser can wait for its barrier across frames and then
+    /// settle here: the host passes its own `settings`, a player `None` and reads the host's stream.
+    pub(crate) fn net_race_settle(&mut self, host: bool, settings: Option<&nfs_net::options::LaunchSettings>) {
+        use nfs_net::options::id as opt;
+        let Some(n) = self.net.session.as_mut() else { return };
         // the records' slot is the **race index** — `player+0x4C`, the player's place in the room's
         // list among those in the race (0x4B4EBC, 0x4B4ED2) — not the player id
         let index = n.race_indices();
@@ -890,7 +922,8 @@ impl App {
         n.note_race_indices(&index);
         let me = index.iter().find(|(id, _)| *id == n.my_player_id()).map_or(0, |(_, i)| *i);
         let got = n.launch.clone();
-        let own = settings.as_ref();
+        let own = settings;
+        let players = n.race_indices().len().max(1) as u32;
         // the host's values are its own settings; a player's are the records it heard (the
         // barrier has run, so the host's stream is in), falling back on its own menu
         let m = self.fe.menu.as_ref();
@@ -929,7 +962,7 @@ impl App {
                 .filter_map(|(k, id)| got.number(id).map(|v| (k, v)))
                 .collect(),
         };
-        tracing::info!(target: "netplay", host, passed, ?race, "network launch settled (0x4B4DA0)");
+        tracing::info!(target: "netplay", host, ?race, "network launch settled (0x4B4DA0)");
         self.net.race = Some(race);
     }
 
@@ -1042,9 +1075,12 @@ impl App {
     /// `DIAL` has no modem behind it here, and `ENTER` on the server list only moves the cursor,
     /// since what the original's server list connects *to* is the lobby service of §1.
     pub(crate) fn network_callback(&mut self, cb: &str, _event_loop: &ActiveEventLoop) {
-        #[cfg(target_arch = "wasm32")]
-        { let _ = cb; if let Some(window) = web_sys::window() { let _ = window.alert_with_message("Multiplayer is not available in the browser yet"); } return; }
-
+        // A browser cannot listen on UDP, and this relay has no host mode: hosting stays a native
+        // feature. The button is disabled on the peer-to-peer screen (`net_browse_step`).
+        if cfg!(target_arch = "wasm32") && cb == "CREATE" {
+            tracing::info!("CREATE (0x509A00): a browser cannot host a UDP session");
+            return;
+        }
         let opened = match cb {
             // `CREATE` on the games screens (0x509E40, registered at 0x509D53 for `local` and
             // `udpip`) raises the game-name dialog; on the peer-to-peer screen (0x50B140) it goes
@@ -1211,7 +1247,15 @@ impl App {
                 // 0x50A0DB / 0x50AB31: the lobby screen, not the race — `0x4D2100(name, 0, 1)`
                 self.fe_open(if host { "creategame" } else { "joingame" }, 0, true);
             }
-            Err(e) => tracing::warn!(cb, error = %e, "cannot open the network session"),
+            Err(e) => {
+                tracing::warn!(cb, error = %e, "cannot open the network session");
+                // A browser has no other way to say that the relay URL is unusable; the ordinary
+                // connection loss after CONNECT is the original's own 830 notice.
+                #[cfg(target_arch = "wasm32")]
+                if let Some(window) = web_sys::window() {
+                    let _ = window.alert_with_message(&format!("Cannot start the network session: {e}"));
+                }
+            }
         }
     }
 
@@ -1466,6 +1510,232 @@ impl ExchangeIn {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+impl App {
+    /// Start a network race without blocking the JavaScript event loop. The host's `0xB3`/`0xBD`
+    /// rounds are exchanged by [`Self::net_start_step`] and [`Self::net_barrier_pump`] on later
+    /// frames; the native `net_playgame`/`net_launch_sync` loops cannot run in a browser.
+    pub(crate) fn net_start_begin(&mut self) {
+        if self.net.start.is_some() {
+            return;
+        }
+        let Some((me, host)) = self.net.session.as_ref().filter(|n| n.established()).and_then(|n| Some((n.my_slot()?, n.is_host()))) else {
+            return;
+        };
+        if host {
+            // The browser build has no UDP listener, so this path cannot be reached; a native host
+            // keeps the blocking sequence.
+            tracing::warn!(target: "netplay", "a browser cannot host the race start");
+            return;
+        }
+        let me = me as u32;
+        // PLAYGAME step 2 saves the own `.READY` before clearing and sending it (0x50CF0C
+        // `setne bl`); the send after the first barrier is this saved value, not a bare yes
+        let ready = self.net.session.as_ref().is_some_and(|n| n.slots.slot[me as usize].ready);
+        if let Some(n) = self.net.session.as_mut() {
+            n.send_slot_records(&[nfs_net::slots::ready_record(me, false)]);
+            n.request_start();
+        }
+        self.net.start = Some(NetStart::Release { me, ready });
+        tracing::info!(target: "netplay", "browser network start: waiting for the host's 0xB3");
+    }
+
+    fn net_start_abort(&mut self) {
+        self.net.start = None;
+        self.net.start_ready = false;
+        self.net.barriers.clear();
+        if let Some(n) = self.net.session.as_mut() {
+            n.abort_race();
+        }
+        self.bind_lists();
+    }
+
+    /// One frame of the browser's PLAYGAME/launch sequence. Never sleeps: a barrier's `0xBD` round
+    /// has to reach the WebSocket's `onmessage` handler, which only runs when this returns.
+    pub(crate) fn net_start_step(&mut self) {
+        if self.net.start.is_none() {
+            return;
+        }
+        if self.net.session.as_ref().is_none_or(|n| !n.established()) {
+            self.net.start = None;
+            self.net.barriers.clear();
+            return;
+        }
+        let mut next: Option<NetStart> = None;
+        let mut launch_send = false;
+        let mut done = false;
+        let mut abort = false;
+        // The first barrier passed: the saved `.READY` (0x50CFF1's `bl`) goes out in step 7, after
+        // the session borrow is dropped — step 5's missing-car notice raises a dialog of its own.
+        let mut ready_send: Option<(u32, bool)> = None;
+        {
+            let Some(state) = self.net.start.as_mut() else { return };
+            let Some(n) = self.net.session.as_mut().filter(|n| n.established()) else { return };
+            let _ = n.poll_lobby();
+            match state {
+                NetStart::Release { me, ready } => {
+                    if n.start_released() {
+                        match n.barrier_begin() {
+                            Some(run) => next = Some(NetStart::Play1 { run, me: *me, ready: *ready }),
+                            None => abort = true,
+                        }
+                    }
+                }
+                NetStart::Play1 { run, me, ready } => match n.barrier_poll(run) {
+                    Some(true) => ready_send = Some((*me, *ready)),
+                    Some(false) => abort = true,
+                    None => {}
+                },
+                NetStart::Play2 { run } => match n.barrier_poll(run) {
+                    // 0x50D230…0x50D251: any room player whose `.READY` is 0 clears the latch —
+                    // the abort arm. The host runs the same check behind its own copy of this
+                    // barrier; a player it has retired has already left `net+0xE5` (the
+                    // barrier's mask reads `in_race` afresh), so a still-listed one can only
+                    // have cleared its flag after the host's press gate read it as set.
+                    Some(true) => {
+                        if n.room.players.iter().any(|p| !usize::try_from(p.id).ok().and_then(|i| n.slots.slot.get(i)).is_some_and(|s| s.ready)) {
+                            tracing::info!(target: "netplay", "browser network start: a room player is not ready (0x50D28E) — back to the lobby");
+                            abort = true;
+                        } else {
+                            next = Some(NetStart::LaunchBegin);
+                        }
+                    }
+                    Some(false) => abort = true,
+                    None => {}
+                },
+                NetStart::LaunchBegin => match n.barrier_begin() {
+                    // 0x48D3D0's own barrier; the reset and the launch records wait for it.
+                    Some(run) => next = Some(NetStart::LaunchFirst { run }),
+                    None => abort = true,
+                },
+                NetStart::LaunchFirst { run } => match n.barrier_poll(run) {
+                    Some(true) => launch_send = true,
+                    Some(false) => abort = true,
+                    None => {}
+                },
+                NetStart::Launch { run } => match n.barrier_poll(run) {
+                    Some(true) => done = true,
+                    Some(false) => abort = true,
+                    None => {}
+                },
+            }
+        }
+        if abort {
+            tracing::info!(target: "netplay", "browser network start: a barrier failed — back to the lobby");
+            self.net_start_abort();
+            return;
+        }
+        if let Some((me, mut ready)) = ready_send {
+            // 0x50D0C5…0x50D0E9: a machine that was ready checks every room player's car; the
+            // first one this install lacks raises 814 (0x50D107) and clears the flag, which is
+            // what a host that is not ready does at 0x50D169…0x50D17B
+            if ready && self.net_missing_car_notice() {
+                ready = false;
+            }
+            let Some(n) = self.net.session.as_mut().filter(|n| n.established()) else {
+                self.net_start_abort();
+                return;
+            };
+            n.send_slot_records(&[nfs_net::slots::ready_record(me, ready)]);
+            match n.barrier_begin() {
+                Some(run) => self.net.start = Some(NetStart::Play2 { run }),
+                None => self.net_start_abort(),
+            }
+            return;
+        }
+        if launch_send {
+            match self.net_launch_send_records() {
+                Some(run) => self.net.start = Some(NetStart::Launch { run }),
+                None => self.net_start_abort(),
+            }
+            return;
+        }
+        if done {
+            self.net.start = None;
+            self.net_launch_finish();
+            self.net.start_ready = true;
+            return;
+        }
+        if let Some(next) = next {
+            self.net.start = Some(next);
+        }
+    }
+
+    /// Advance the load and race-go barrier jobs the browser did not wait for. The host's phases
+    /// depend on this machine's `0xBD`s, so it keeps answering them after `start_race` returns.
+    pub(crate) fn net_barrier_pump(&mut self) {
+        let Some(mut n) = self.net.session.take() else { return };
+        loop {
+            let done = {
+                let Some(job) = self.net.barriers.front_mut() else { break };
+                match job {
+                    BarrierJob::Load(run) => n.barrier_poll(run).is_some(),
+                    BarrierJob::Go { runs, index } => match n.barrier_poll(&mut runs[*index]) {
+                        Some(true) => {
+                            *index += 1;
+                            if *index >= runs.len() {
+                                // 0x4153AE: the `0xC5` request after the three barriers, then
+                                // `wait_go` is the race frame's own wait (the `go_hold` check).
+                                n.request_go();
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        Some(false) => true,
+                        None => false,
+                    },
+                }
+            };
+            let _ = n.poll_lobby();
+            if done {
+                self.net.barriers.pop_front();
+            } else {
+                break;
+            }
+        }
+        self.net.session = Some(n);
+    }
+
+    /// The frame hook: let the WebSocket deliver, answer any barrier, then either start the race
+    /// (the launch barrier passed) or advance the start sequence. Called from `events.rs` before
+    /// the window event's own handling.
+    pub(crate) fn net_wasm_step(&mut self, event_loop: &ActiveEventLoop) {
+        if self.net.session.is_none() {
+            self.net.barriers.clear();
+            self.net.start = None;
+            self.net.start_ready = false;
+            return;
+        }
+        let go_hold = self.net.session.as_mut().is_some_and(|n| n.go_hold());
+        // In a running race the frame's own `net_step` polls with the real tick; polling here with
+        // tick 0 would feed car states into the wrong exchange slot. Before the race (and while a
+        // load/go barrier is still outstanding) this is the only pump the WebSocket has.
+        let needs_poll = self.vehicle.is_none()
+            || self.net.start.is_some()
+            || self.net.start_ready
+            || go_hold
+            || !self.net.barriers.is_empty();
+        let dirty = if needs_poll {
+            self.net.session.as_mut().is_some_and(|n| n.poll_lobby())
+        } else {
+            false
+        };
+        // `poll_lobby` consumes the session's `dirty` flag, so the front end's own `fe_frame_net`
+        // would never see it. Bind here instead, or the room's player list and the chat box only
+        // refresh when some other action (READY, a click) rebinds them.
+        if dirty && self.vehicle.is_none() && self.race.is_none() {
+            self.bind_lists();
+        }
+        self.net_barrier_pump();
+        if std::mem::take(&mut self.net.start_ready) {
+            self.start_from_layout(event_loop);
+            return;
+        }
+        self.net_start_step();
+    }
+}
+
 /// lobby. `self.net` became `self.net.session`; `self.lobby` became `self.net.lobby`.
 pub(crate) struct Network {
     /// `--net host[:PORT]` / `--net join:HOST[:PORT]` — network play (`netplay`, `network.md` §7).
@@ -1494,7 +1764,21 @@ pub(crate) struct Network {
     pub(crate) connect_pending: bool,
     /// `[this+0x289]`: that `joingame` has been opened (once)
     pub(crate) connect_opened: bool,
+    /// **Browser glue.** A network race start waits for the room's barriers; the browser cannot
+    /// block its JavaScript event loop (the WebSocket's `onmessage` would never run), so the
+    /// sequence is advanced one frame at a time from [`App::net_wasm_step`].
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) start: Option<netplay::NetStart>,
+    /// The launch barrier passed: the next frame starts the front end's hand-over and the race.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) start_ready: bool,
+    /// The load and race-go barriers, pumped after `start_race` returns.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) barriers: std::collections::VecDeque<netplay::BarrierJob>,
 }
+
+// The browser's start state lives in `netplay` so both the application and the front-end code can
+// name it (`NetStart`, `BarrierJob`).
 
 /// The race a network launch settled - the host's own choices, or what a player heard in the
 /// host's `0xBC` stream - resolved the way the launch reads the option table (`network.md` §11.7).

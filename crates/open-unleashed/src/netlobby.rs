@@ -99,8 +99,9 @@ impl App {
 
     /// `festrings` 814 — "%s picked %s. You need to download this car" — for the first player
     /// whose car is not here (0x50A433…0x50A48F; the car name is 0x4F4360(id)+2, the first record
-    /// when the id is unknown).
-    fn net_missing_car_notice(&mut self) -> bool {
+    /// when the id is unknown). PLAYGAME's step 5 (0x50D107) raises it too, which is why the
+    /// browser's start sequence calls it from `app::net`.
+    pub(crate) fn net_missing_car_notice(&mut self) -> bool {
         let Some(n) = self.net.session.as_ref() else { return false };
         let catalog = self.fe_car_catalog();
         let missing = n.room.players.iter().find_map(|p| {
@@ -273,16 +274,47 @@ impl App {
     /// 0x4153F0: `while (up && +0xC4) 0x4B0FA0`). Only for a race a launch numbered (`net+0xE5` set,
     /// glue: a `--net` run that never launched has none of it).
     pub(crate) fn net_race_go(&mut self) {
-        let Some(n) = self.net.session.as_mut().filter(|n| n.established() && n.in_race != 0) else { return };
-        for _ in 0..3 {
-            if !n.launch_barrier() {
-                return;
+        #[cfg(target_arch = "wasm32")]
+        {
+            // The browser starts the race frame; the host waits for these barrier rounds, so they
+            // are answered from the frame loop (`App::net_barrier_pump`) instead of blocking here.
+            let job = {
+                let Some(n) = self.net.session.as_mut().filter(|n| n.established() && n.in_race != 0) else { return };
+                let runs = [n.barrier_begin(), n.barrier_begin(), n.barrier_begin()];
+                let job = match runs {
+                    [Some(first), Some(second), Some(third)] => {
+                        Some(netplay::BarrierJob::Go { runs: [first, second, third], index: 0 })
+                    }
+                    _ => None,
+                };
+                // NG: the exchange's ring and timer restart here (0x415E00, 0x41537B). The `0xC5`
+                // request waits for the barrier job below: sending it early would release the host
+                // before its own three barriers have run.
+                n.exchange_race_frame();
+                if job.is_none() {
+                    // no room seat means no barrier rounds to answer; still ask for the go
+                    n.request_go();
+                }
+                job
+            };
+            if let Some(job) = job {
+                self.net.barriers.push_back(job);
             }
+            return;
         }
-        // NG: the exchange's ring and timer restart here (0x415E00, 0x41537B), before the 0xC5 request
-        n.exchange_race_frame();
-        n.request_go();
-        n.wait_go();
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(n) = self.net.session.as_mut().filter(|n| n.established() && n.in_race != 0) else { return };
+            for _ in 0..3 {
+                if !n.launch_barrier() {
+                    return;
+                }
+            }
+            // NG: the exchange's ring and timer restart here (0x415E00, 0x41537B), before the 0xC5 request
+            n.exchange_race_frame();
+            n.request_go();
+            n.wait_go();
+        }
     }
 
     /// **The barrier at the end of the race load, 0x4B68C4** — after step 9 (0x414E74) and before step
@@ -291,24 +323,34 @@ impl App {
     /// players' rows while it waits. The redraw is paced (glue: the original redraws on every turn of
     /// its own pump, which also waits for the vertical retrace).
     pub(crate) fn net_load_barrier(&mut self, renderer: &mut Renderer) {
-        let Some(mut run) = self.net.session.as_ref().filter(|n| n.established() && n.in_race != 0).and_then(|n| n.barrier_begin()) else { return };
-        let mut last = Instant::now() - Duration::from_millis(100);
-        loop {
-            let Some(mut n) = self.net.session.take() else { return };
-            let done = n.barrier_poll(&mut run);
-            let _ = n.poll_lobby();
-            self.net.session = Some(n);
-            if let Some(passed) = done {
-                if passed {
-                    tracing::info!(target: "netplay", "launch barrier passed (0xBD ×4)");
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = renderer;
+            let Some(run) = self.net.session.as_ref().filter(|n| n.established() && n.in_race != 0).and_then(|n| n.barrier_begin()) else { return };
+            self.net.barriers.push_back(netplay::BarrierJob::Load(run));
+            return;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(mut run) = self.net.session.as_ref().filter(|n| n.established() && n.in_race != 0).and_then(|n| n.barrier_begin()) else { return };
+            let mut last = Instant::now() - Duration::from_millis(100);
+            loop {
+                let Some(mut n) = self.net.session.take() else { return };
+                let done = n.barrier_poll(&mut run);
+                let _ = n.poll_lobby();
+                self.net.session = Some(n);
+                if let Some(passed) = done {
+                    if passed {
+                        tracing::info!(target: "netplay", "launch barrier passed (0xBD ×4)");
+                    }
+                    return;
                 }
-                return;
+                if last.elapsed() >= Duration::from_millis(50) {
+                    self.race_loading_frame(renderer, -1);
+                    last = Instant::now();
+                }
+                std::thread::sleep(Duration::from_millis(2));
             }
-            if last.elapsed() >= Duration::from_millis(50) {
-                self.race_loading_frame(renderer, -1);
-                last = Instant::now();
-            }
-            std::thread::sleep(Duration::from_millis(2));
         }
     }
 
@@ -414,6 +456,8 @@ impl App {
     /// browsing socket being open (`Lobby::open` succeeded) or a session being established; and `Comms.ModemList`
     /// is empty — there is no modem device (the connection layer's enumeration 0x48E1A0 kind 2 lists TAPI / serial
     /// devices), so both modem buttons are disabled, exactly what the original's tick gives a machine without one.
+    /// **Browser glue:** the wasm build has no UDP listener to create and no LAN to browse, so `CREATE` and the
+    /// games-list `JOIN` are disabled there; `PeerToPeerIP`'s `CONNECT` stays live and uses the relay.
     pub(crate) fn net_browse_step(&mut self) {
         if self.vehicle.is_some() || self.fe.layout_preview.is_none() {
             return;
@@ -429,6 +473,23 @@ impl App {
             // `Comms.ModemList` — no device on this machine
             "modem" => vec![("ID_MODEMCREATEGAME", false), ("ID_DIALBUTTON", false)],
             _ => Vec::new(),
+        };
+        // A browser can only join the address typed on the peer-to-peer screen. There is no UDP
+        // listener for CREATE and no LAN browse for the games list, so those buttons stay dead.
+        #[cfg(target_arch = "wasm32")]
+        let rules = {
+            let mut rules = rules;
+            // `PeerToPeerIP.lay` names its CONNECT button `ID_COMMSJOINGAME` too, so only CREATE
+            // may be disabled there. The LAN screens lose both: no listener, no games list.
+            if name.eq_ignore_ascii_case("peertopeerip") {
+                rules.retain(|(w, _)| *w != "ID_COMMSCREATEGAME");
+                rules.push(("ID_COMMSCREATEGAME", false));
+            } else if name.eq_ignore_ascii_case("udpip") || name.eq_ignore_ascii_case("local") {
+                rules.retain(|(w, _)| *w != "ID_COMMSCREATEGAME" && *w != "ID_COMMSJOINGAME");
+                rules.push(("ID_COMMSCREATEGAME", false));
+                rules.push(("ID_COMMSJOINGAME", false));
+            }
+            rules
         };
         if !rules.is_empty()
             && let Some(l) = self.fe.layout_preview.as_mut()

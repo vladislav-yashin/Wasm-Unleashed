@@ -20,10 +20,12 @@ EXTRA_FILES ?=
 WEB_HOST ?= 127.0.0.1
 WEB_PORT ?= 8080
 WEB_BUILD_FLAGS ?=
+EXE := $(if $(filter Windows_NT,$(OS)),.exe,)
+RELAY_BINARY ?= target/debug/nfs-relay$(EXE)
 
 WASM_BINDGEN_VERSION := $(shell awk '/^name = "wasm-bindgen"$$/{getline; gsub(/version = "|"/, ""); print; exit}' Cargo.lock)
 
-.PHONY: help setup-web install-wasm-bindgen build-web web-data serve \
+.PHONY: help setup-web install-wasm-bindgen build-web web-data serve relay-build relay \
 	test test-rust test-web check-wasm check-deploy ci fmt fmt-check \
 	docker-up docker-down docker-logs clean clean-all
 
@@ -33,7 +35,9 @@ help:
 		'  make setup-web                  install WASM target and wasm-bindgen CLI' \
 		'  make build-web                  build dist/ (WEB_BUILD_FLAGS=--debug for a debug build)' \
 		'  make web-data GAME_DIR=...      prepare web-data; movie executable auto-detected' \
-		'  make serve                      serve dist/ and web-data on WEB_HOST:WEB_PORT' \
+		'  make serve                      serve dist/ and web-data, starting the relay too' \
+		'  make relay-build                build the relay binary used by serve' \
+		'  make relay                      run a standalone UDP relay on 127.0.0.1:8090' \
 		'  make docker-up                  run the local compose stack' \
 		'  make docker-down                stop the local compose stack' \
 		'  make docker-logs                follow local container logs' \
@@ -97,17 +101,24 @@ web-data:
 		$(foreach file,$(EXTRA_FILES),--extra-file "$(file)")
 	@$(PYTHON) -c "import json, sys; files=json.load(open('$(WEB_DATA)/manifest.json'))['files']; sys.exit(0 if 'madtables.bin' in files else 'madtables.bin missing from web-data')"
 
-serve:
-	$(PYTHON) tools/web/serve.py --host "$(WEB_HOST)" --port "$(WEB_PORT)" --data "$(WEB_DATA)"
+relay-build:
+	$(CARGO) +$(RUST_TOOLCHAIN) build --locked -p nfs-relay
+
+serve: relay-build
+	$(PYTHON) tools/web/serve.py --host "$(WEB_HOST)" --port "$(WEB_PORT)" --data "$(WEB_DATA)" \
+		--relay --relay-binary "$(RELAY_BINARY)"
+
+relay:
+	$(CARGO) +$(RUST_TOOLCHAIN) run --locked -p nfs-relay -- --listen 127.0.0.1:8090 --allow-loopback --allow-private
 
 test: test-rust test-web
 
 test-rust:
-	$(CARGO) +$(RUST_TOOLCHAIN) test --locked -p nfs-formats -p nfs-net --lib
+	$(CARGO) +$(RUST_TOOLCHAIN) test --locked -p nfs-formats -p nfs-net --lib -p nfs-relay
 
 test-web:
 	$(PYTHON) -m unittest discover -s tools/web -p 'test_*.py'
-	node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs packaging/web/startup-assets.test.mjs
+	node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs packaging/web/startup-assets.test.mjs packaging/web/net.test.mjs
 
 check-wasm:
 	$(CARGO) +$(RUST_TOOLCHAIN) check --locked -p open-unleashed --target $(WASM_TARGET)
@@ -117,6 +128,7 @@ check-deploy:
 	bash -n packaging/web/deploy/remote-deploy.sh
 	bash -n packaging/web/deploy/setup-server.sh
 	OPEN_UNLEASHED_IMAGE=ghcr.io/example/open-unleashed@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+	OPEN_UNLEASHED_RELAY_IMAGE=ghcr.io/example/open-unleashed-relay@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
 		docker compose -f packaging/web/compose.deploy.yaml config >/dev/null
 	$(MAKE) -n web-data GAME_DIR=/tmp/game >/dev/null
 

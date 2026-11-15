@@ -11,26 +11,37 @@ impl NetPlay {
     /// [`NetPlay::start`] with the session's name — `Comms.GameName`'s text, which 0x509B00 puts
     /// into the descriptor (0x509B41) whatever it is, empty included.
     pub fn start_named(spec: &str, who: &str, game_name: &str) -> anyhow::Result<Self> {
+        #[cfg(target_arch = "wasm32")]
+        let _ = game_name; // a browser only joins; the session's own name is the host's
         let (mode, rest) = spec.split_once(':').unwrap_or((spec, ""));
         let mut join_target = None;
         let net = match mode {
             "host" => {
-                let port: u16 = if rest.is_empty() {
-                    port()
-                } else {
-                    rest.parse()?
-                };
-                let sock = CommSocket::bind(port)?;
-                // 0x48DD97…0x48DDF8: the session's name is `<Comms.GameName>~<version>`
-                let name = nfs_net::comm::desc::name_field(game_name, &game_version());
-                let mut n = with_probe(Net::host(sock, name, key(), nfs_net::session::DEFAULT_LIMIT));
-                n.advertise = advertised_record();
-                n.my_name = name16(who);
-                // 0x588EBF…0x588ED3 → 0x48A700: the version (the game-name test 0x49151E… is the
-                // lobby's `0xB6` room request only, never a LAN / direct join — `network.md` §11.28)
-                n.identity_gate = Some(game_version());
-                tracing::info!(addr = %n.local_addr()?, "hosting");
-                n
+                // A browser cannot listen on UDP. Hosting would need the relay's host mode; the
+                // peer-to-peer screen offers CONNECT only in this build.
+                #[cfg(target_arch = "wasm32")]
+                {
+                    return Err(anyhow::anyhow!("hosting a network game is not available in the browser"));
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    let port: u16 = if rest.is_empty() {
+                        port()
+                    } else {
+                        rest.parse()?
+                    };
+                    let sock = CommSocket::bind(port)?;
+                    // 0x48DD97…0x48DDF8: the session's name is `<Comms.GameName>~<version>`
+                    let name = nfs_net::comm::desc::name_field(game_name, &game_version());
+                    let mut n = with_probe(Net::host(sock, name, key(), nfs_net::session::DEFAULT_LIMIT));
+                    n.advertise = advertised_record();
+                    n.my_name = name16(who);
+                    // 0x588EBF…0x588ED3 → 0x48A700: the version (the game-name test 0x49151E… is the
+                    // lobby's `0xB6` room request only, never a LAN / direct join — `network.md` §11.28)
+                    n.identity_gate = Some(game_version());
+                    tracing::info!(addr = %n.local_addr()?, "hosting");
+                    n
+                }
             }
             "join" => {
                 let target = if rest.contains(':') {
@@ -38,10 +49,20 @@ impl NetPlay {
                 } else {
                     format!("{rest}:{}", port())
                 };
+                #[cfg(target_arch = "wasm32")]
+                let host: SocketAddr = target.parse().map_err(|_| {
+                    anyhow::anyhow!("the browser can only join an IPv4 address, not {target:?}")
+                })?;
+                #[cfg(not(target_arch = "wasm32"))]
                 let host: SocketAddr = target
                     .to_socket_addrs()?
                     .next()
                     .ok_or_else(|| anyhow::anyhow!("cannot resolve {target}"))?;
+                // A browser has no UDP socket: one WebSocket to the relay carries this peer's
+                // datagrams, and the relay forwards them to `host`.
+                #[cfg(target_arch = "wasm32")]
+                let sock = CommSocket::relay_join(host)?;
+                #[cfg(not(target_arch = "wasm32"))]
                 let sock = CommSocket::bind_on(SocketAddr::V4(SocketAddrV4::new(
                     Ipv4Addr::UNSPECIFIED,
                     0,
@@ -52,6 +73,14 @@ impl NetPlay {
                 // builds it: the host's address at +0x04, the player record from +0x28), and nothing
                 // before it — a real two-instance capture shows no `'w'`, `'r'` or `'d'` on this path
                 // (`REFERENCE-2026-10-02-SRVE.md` §1). 0x588130 repeats the same buffer until the `'a'`.
+                // A native send failing is unusual enough to report; the browser's first send may
+                // race its WebSocket handshake, and `net.mjs` queues it. Keep the session either
+                // way so the one-second retry in `poll` can send it again.
+                #[cfg(target_arch = "wasm32")]
+                if let Err(error) = n.join(host, &join_identity(who)) {
+                    tracing::warn!(%host, %error, "the first relay join send failed; retrying");
+                }
+                #[cfg(not(target_arch = "wasm32"))]
                 n.join(host, &join_identity(who))?;
                 join_target = Some(host);
                 tracing::info!(%host, addr = %n.local_addr()?, "joining");
@@ -61,6 +90,9 @@ impl NetPlay {
             // EA lobby service, which no longer exists — the session is a client that never hears an answer, so the
             // connect's 16 s deadline ends it in state 4 (830)
             "signon" => {
+                #[cfg(target_arch = "wasm32")]
+                let sock = CommSocket::relay_idle();
+                #[cfg(not(target_arch = "wasm32"))]
                 let sock = CommSocket::bind_on(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
                 with_probe(Net::client(sock, key(), name16(who)))
             }
@@ -113,6 +145,7 @@ impl NetPlay {
             timer_done: 0,
             commands: [0; 8],
             go_wait: false,
+            go_since: None,
             go_clock: None,
             aborted: false,
             sent_time: false,
@@ -223,6 +256,7 @@ impl NetPlay {
                 // barrier's word `+0xE6 = 0` (0x48F896)
                 self.aborted = false;
                 self.go_wait = true;
+                self.go_since = Some(Instant::now());
                 self.go_clock = None;
                 self.sent_time = false;
                 self.barrier = 0;

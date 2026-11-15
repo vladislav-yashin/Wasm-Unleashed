@@ -232,6 +232,33 @@ impl NetPlay {
         self.is_host() || (self.join == JoinState::Joined && self.state_in == Some(nfs_net::room::comm_state::CONNECTED) && !self.lost)
     }
 
+    /// `net+0xC4` as PLAYGAME's wait reads it: the room's `0xB3` has arrived and the start may
+    /// proceed. The native loop is [`NetPlay::wait_released`]; the browser polls this flag each
+    /// frame instead of blocking the JavaScript event loop.
+    pub fn start_released(&self) -> bool {
+        self.go_wait
+    }
+
+    /// The race frame's hold on the browser's frames (0x4152E0): the room's first `0xC5` has not
+    /// come yet, the link is up and — the D12 glue [`NetPlay::wait_go`] carries —
+    /// [`BARRIER_LIMIT`] has not run out. The limit's expiry is logged once and lets the frames
+    /// go on, exactly what `wait_go`'s `break` does; it stays expired even if the `0xC5` arrives
+    /// late (the native loop does not resume either).
+    pub fn go_hold(&mut self) -> bool {
+        if !self.go_wait || self.lost || !self.established() {
+            return false;
+        }
+        match self.go_since {
+            Some(since) if since.elapsed() <= BARRIER_LIMIT => true,
+            Some(_) => {
+                self.go_since = None;
+                tracing::warn!(target: "netplay", "race start: no 0xC5 came (the browser frame hold ran out)");
+                false
+            }
+            None => false,
+        }
+    }
+
     /// The other players in the room's order — their race index among the others is their seat
     /// (0x4B4DA0 numbers `player+0x4C` in list order over the players `net+0xE5` marks, and the
     /// opponents are all but our own): `(id, name, slot record)`.

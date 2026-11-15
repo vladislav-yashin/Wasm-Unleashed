@@ -6,19 +6,48 @@
 //! this is the same socket set up the same way (`SO_BROADCAST`, 0x560570) polled without blocking.
 //! What crosses the wire is byte for byte what [`crate::wire::Datagram`] describes.
 
-use crate::wire::{Addr, Datagram, MAX_DATAGRAM, MAX_PAYLOAD};
+use crate::wire::{Addr, Datagram, MAX_PAYLOAD};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::wire::MAX_DATAGRAM;
 use std::io;
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+#[cfg(not(target_arch = "wasm32"))]
+use std::net::UdpSocket;
 
-/// One socket, set up the way `0x560550` sets its own up.
-pub struct CommSocket {
+#[cfg(target_arch = "wasm32")]
+thread_local! {
+    /// The relay's own UDP address towards the host, learned from the endpoint frame. The browser
+    /// has no local socket address of its own; this is what the host actually sees and what
+    /// `Comms.Data(MYIPADDRESS)` should show.
+    static RELAY_ENDPOINT: std::cell::Cell<Option<SocketAddr>> = const { std::cell::Cell::new(None) };
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+struct Inner {
     sock: UdpSocket,
     buf: Vec<u8>,
+}
+
+#[cfg(target_arch = "wasm32")]
+struct Inner {
+    relay: nfs_platform::net::RelaySocket,
+}
+
+/// One socket, set up the way `0x560550` sets its own up.
+///
+/// On the desktop it is the original's UDP socket. In a browser it is a WebSocket to `nfs-relay`
+/// (`nfs_platform::net::RelaySocket`), which turns each frame into one UDP datagram; the game sees
+/// the same [`Datagram`] either way.
+pub struct CommSocket {
+    inner: Inner,
     /// **TEST GLUE, not in the original.** `NFS_NET_DROP=<percent>` makes `send_to` drop that share
     /// of the game's data frames (tag `'='` with a payload) — a lossy link for the reliable layer's
     /// proofs (`network.md` §11.18). `NFS_NET_DROP_SEED` seeds the generator (default: the port).
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     drop_percent: u32,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     drop_state: std::cell::Cell<u32>,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     dropped: std::cell::Cell<u32>,
     /// **TEST GLUE, not in the original.** `NFS_NET_DUMP=<file>` appends every datagram this socket
     /// sends (`S`) or receives (`R`) as `<seconds> <S|R> <own port> <peer> <hex>` — the port's side of
@@ -30,20 +59,39 @@ pub struct CommSocket {
 impl CommSocket {
     /// Bind every interface on `port`, as `0x560550` does with `sin_addr = INADDR_ANY`. Port 0 asks
     /// the OS for a free one, which is what the tests use.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn bind(port: u16) -> io::Result<Self> {
         Self::bind_on(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port)))
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn bind_on(addr: SocketAddr) -> io::Result<Self> {
         let sock = UdpSocket::bind(addr)?;
         // setsockopt(SOL_SOCKET, SO_BROADCAST, 1) at 0x560580 — the IPX path sets it too
         sock.set_broadcast(true)?;
         sock.set_nonblocking(true)?;
-        let drop_percent = std::env::var("NFS_NET_DROP").ok().and_then(|v| v.parse::<u32>().ok()).unwrap_or(0).min(100);
         let seed = std::env::var("NFS_NET_DROP_SEED").ok().and_then(|v| v.parse::<u32>().ok()).unwrap_or_else(|| sock.local_addr().map(|a| a.port() as u32).unwrap_or(1));
-        Ok(Self {
-            sock,
-            buf: vec![0u8; MAX_DATAGRAM],
+        Ok(Self::new(Inner { sock, buf: vec![0u8; MAX_DATAGRAM] }, seed))
+    }
+
+    /// The browser's joining socket: one WebSocket to the relay, bound to `target`.
+    #[cfg(target_arch = "wasm32")]
+    pub fn relay_join(target: SocketAddr) -> io::Result<Self> {
+        let relay = nfs_platform::net::RelaySocket::connect(target)?;
+        Ok(Self::new(Inner { relay }, 1))
+    }
+
+    /// An idle socket for a lobby that only needs the session object. It sends nothing and never
+    /// opens a WebSocket; the peer-to-peer screen types an address instead of browsing.
+    #[cfg(target_arch = "wasm32")]
+    pub fn relay_idle() -> Self {
+        Self::new(Inner { relay: nfs_platform::net::RelaySocket::idle() }, 1)
+    }
+
+    fn new(inner: Inner, seed: u32) -> Self {
+        let drop_percent = std::env::var("NFS_NET_DROP").ok().and_then(|v| v.parse::<u32>().ok()).unwrap_or(0).min(100);
+        Self {
+            inner,
             drop_percent,
             drop_state: std::cell::Cell::new(seed.wrapping_mul(2654435761).max(1)),
             dropped: std::cell::Cell::new(0),
@@ -51,21 +99,28 @@ impl CommSocket {
                 .ok()
                 .and_then(|p| nfs_platform::fs::OpenOptions::new().create(true).append(true).open(p).ok())
                 .map(std::cell::RefCell::new),
-        })
+        }
     }
 
     fn dump_line(&self, dir: char, peer: SocketAddr, bytes: &[u8]) {
         use std::io::Write;
         if let Some(f) = &self.dump {
             let t = nfs_platform::time::SystemTime::now().duration_since(nfs_platform::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
-            let port = self.sock.local_addr().map(|a| a.port()).unwrap_or(0);
+            let port = self.local_addr().map(|a| a.port()).unwrap_or(0);
             let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
             let _ = writeln!(f.borrow_mut(), "{t:.6} {dir} {port} {peer} {hex}");
         }
     }
 
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
-        self.sock.local_addr()
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.inner.sock.local_addr()
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            Ok(RELAY_ENDPOINT.with(|e| e.get()).unwrap_or_else(|| SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0))))
+        }
     }
 
     /// The 20-byte record the protocol carries for this socket — what `[desc+0x44]` copies out of
@@ -93,38 +148,87 @@ impl CommSocket {
         }
         let d = Datagram::encode(tag, payload).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
         self.dump_line('S', to, &d);
-        self.sock.send_to(&d, to)
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.inner.sock.send_to(&d, to)
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            // the relay URL names the destination; `to` is the same address the session talks to
+            let frame = crate::relay::encode_client(&d).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+            if self.inner.relay.send(&frame) {
+                Ok(payload.len() + 1)
+            } else {
+                Err(io::Error::new(io::ErrorKind::NotConnected, "the relay WebSocket is closed"))
+            }
+        }
     }
 
     /// `0x587950` with a null address: the sender thread builds the broadcast address from the
     /// socket's own port (0x5872C0), so the caller says which port to shout at.
     pub fn broadcast(&self, port: u16, tag: u8, payload: &[u8]) -> io::Result<usize> {
-        self.send_to(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::BROADCAST, port)), tag, payload)
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.send_to(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::BROADCAST, port)), tag, payload)
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            // a browser cannot broadcast; the typed-address screen does not browse
+            let _ = (port, tag, payload);
+            Ok(0)
+        }
     }
 
     /// One datagram, or `None` when nothing is waiting. A datagram that does not fit the original's
     /// 282-byte buffer could not have come from it and is dropped rather than truncated.
     pub fn recv(&mut self) -> io::Result<Option<(SocketAddr, Datagram)>> {
-        loop {
-            match self.sock.recv_from(&mut self.buf) {
-                Ok((n, from)) => {
-                    self.dump_line('R', from, &self.buf[..n]);
-                    match Datagram::decode(&self.buf[..n]) {
-                        Ok(d) => return Ok(Some((from, d))),
-                        Err(_) => continue, // empty or oversized: not ours
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            loop {
+                match self.inner.sock.recv_from(&mut self.inner.buf) {
+                    Ok((n, from)) => {
+                        self.dump_line('R', from, &self.inner.buf[..n]);
+                        match Datagram::decode(&self.inner.buf[..n]) {
+                            Ok(d) => return Ok(Some((from, d))),
+                            Err(_) => continue, // empty or oversized: not ours
+                        }
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(None),
+                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                    // an ICMP port-unreachable comes back as an error on the *next* call on some
+                    // platforms; it says nothing about this socket, so keep draining
+                    Err(e) if e.kind() == io::ErrorKind::ConnectionReset => continue,
+                    Err(e) => return Err(e),
+                }
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            loop {
+                let Some(frame) = self.inner.relay.poll()? else { return Ok(None) };
+                match crate::relay::decode_server(&frame) {
+                    Ok(crate::relay::ServerFrame::Data { from, datagram }) => {
+                        self.dump_line('R', from, &datagram);
+                        match Datagram::decode(&datagram) {
+                            Ok(d) => return Ok(Some((from, d))),
+                            Err(_) => continue,
+                        }
+                    }
+                    Ok(crate::relay::ServerFrame::Endpoint(addr)) => {
+                        RELAY_ENDPOINT.with(|e| e.set(Some(addr)));
+                        continue;
+                    }
+                    Err(error) => {
+                        tracing::debug!(%error, "relay frame ignored");
+                        continue;
                     }
                 }
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(None),
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-                // an ICMP port-unreachable comes back as an error on the *next* call on some
-                // platforms; it says nothing about this socket, so keep draining
-                Err(e) if e.kind() == io::ErrorKind::ConnectionReset => continue,
-                Err(e) => return Err(e),
             }
         }
     }
 
     /// **TEST GLUE.** The same as `NFS_NET_DROP` / `NFS_NET_DROP_SEED`, set from a test.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn set_drop(&mut self, percent: u32, seed: u32) {
         self.drop_percent = percent.min(100);
         self.drop_state.set(seed.wrapping_mul(2654435761).max(1));
@@ -260,6 +364,7 @@ pub fn lan_broadcasts() -> Vec<Ipv4Addr> {
 /// The name lookup is the original's. **Platform glue** on top of it: a modern OS often resolves its
 /// own host name to the loopback (or not at all), which tells the person who has to type this on
 /// the other machine nothing; in that case the first LAN interface's address is shown instead.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn my_ip_string() -> String {
     let named = hostname().and_then(|h| {
         use std::net::ToSocketAddrs;
@@ -274,7 +379,14 @@ pub fn my_ip_string() -> String {
     }
 }
 
-#[cfg(unix)]
+/// In a browser the machine's own address is the relay's endpoint towards the host: the browser has
+/// no socket of its own. Empty until a session has received the relay's endpoint frame.
+#[cfg(target_arch = "wasm32")]
+pub fn my_ip_string() -> String {
+    RELAY_ENDPOINT.with(|e| e.get()).map(|a| a.ip().to_string()).unwrap_or_default()
+}
+
+#[cfg(all(unix, not(target_arch = "wasm32")))]
 fn hostname() -> Option<String> {
     let mut buf = [0u8; 256];
     // SAFETY: the buffer is 256 bytes and `gethostname` writes at most that many, NUL-terminated
@@ -283,7 +395,7 @@ fn hostname() -> Option<String> {
     (r == 0).then(|| String::from_utf8_lossy(&buf[..buf.iter().position(|&c| c == 0).unwrap_or(buf.len() - 1)]).into_owned())
 }
 
-#[cfg(not(unix))]
+#[cfg(all(not(unix), not(target_arch = "wasm32")))]
 fn hostname() -> Option<String> {
     None
 }

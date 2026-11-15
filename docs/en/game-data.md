@@ -17,7 +17,7 @@ From the installed game — the folder that holds `nfs5.exe`:
 | `nfs5.exe` | no | the intro movies' decoder derives `madtables.bin` from it (it is never run); without compatible tables the intro is skipped |
 | `fe.txt` | no | the original's settings file; without it the defaults are used |
 | `nfs5.ini` | no | the Verok patch's settings, read with the same keys and defaults as in the patched original |
-| `version.txt` | no | the game's version (`3.5`), reserved for the network protocol; the browser build does not use it yet |
+| `version.txt` | no | the game's version (`3.5`), used by the network version gate; the browser falls back to `3.5` when the file is absent |
 
 ## Preparing the web data
 

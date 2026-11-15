@@ -152,4 +152,42 @@ impl App {
             self.bind_lists();
         }
     }
+
+    /// Return on a focused input box, shared by the keyboard path (0x4CCC20) and the browser's HTML
+    /// text field. The three input classes end differently, and so do the caller's sound and focus
+    /// rules: the chat box's 0x4C3310 sends and keeps the focus, the list box's 0x4C2120 commits
+    /// into the list and plays no sound, an ordinary box's 0x4CCC20 commits and drops the focus.
+    pub(crate) fn fe_input_return(&mut self, i: usize) -> InputReturn {
+        if let Some(text) = self.fe.layout_preview.as_mut().and_then(|l| l.take_chat(i)) {
+            let empty = self.fe.strings.get(287).unwrap_or_default().to_string();
+            if let Some(n) = self.net.session.as_mut() {
+                n.say(&text, &empty);
+            }
+            return InputReturn::Chat;
+        }
+        if self.fe.layout_preview.as_ref().and_then(|l| l.class_of(i)).as_deref() == Some("NFS5.CHARVECTACCESSORINPUTBOX") {
+            self.fe_charvect_return(i);
+            return InputReturn::List;
+        }
+        if let Some(l) = self.fe.layout_preview.as_mut()
+            && let Some((name, text)) = l.commit_input(i)
+        {
+            tracing::info!(accessor = %name, value = %text, "input box committed");
+            return InputReturn::Box;
+        }
+        InputReturn::None
+    }
+}
+
+/// What [`App::fe_input_return`] did, for the caller's sound and focus rules (see there).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InputReturn {
+    /// the chat box's Return (0x4C3310): the line went out, the focus stays
+    Chat,
+    /// the list box's Return (0x4C2120): committed, focus dropped, no key sound
+    List,
+    /// an ordinary input box's Return (0x4CCC20): committed, focus dropped
+    Box,
+    /// not an input box, or a box with no text to commit
+    None,
 }

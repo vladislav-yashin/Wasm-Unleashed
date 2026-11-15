@@ -216,7 +216,25 @@ impl App {
             choices: std::collections::HashMap::new(),
             hud_cfg: std::cell::RefCell::new(HudCfgCache::default()),
             paths,
-            net: Network { session: net, leaving: Vec::new(), lobby: None, start_due: false, join_notified: false, lobby_sent: false, lobby_car: None, lobby_setsel: false, race: None, connect_pending: false, connect_opened: false },
+            net: Network {
+                session: net,
+                leaving: Vec::new(),
+                lobby: None,
+                start_due: false,
+                join_notified: false,
+                lobby_sent: false,
+                lobby_car: None,
+                lobby_setsel: false,
+                race: None,
+                connect_pending: false,
+                connect_opened: false,
+                #[cfg(target_arch = "wasm32")]
+                start: None,
+                #[cfg(target_arch = "wasm32")]
+                start_ready: false,
+                #[cfg(target_arch = "wasm32")]
+                barriers: std::collections::VecDeque::new(),
+            },
             career,
             career_opponents: launch.career_opponents,
             cheat_bits_live: None,

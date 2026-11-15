@@ -102,6 +102,7 @@ pub const SHIPPED_VERSION: &str = "3.5";
 /// session's port. **Platform glue:** the original's record is the socket's own (0.0.0.0 while
 /// bound to every interface); a browser here merges the answers that reach it over several of the
 /// host's interfaces on this record, so it has to name the machine. `None` when no address is known.
+#[cfg(not(target_arch = "wasm32"))]
 fn advertised_record() -> Option<nfs_net::wire::Addr> {
     let ip: Ipv4Addr = nfs_net::socket::my_ip_string().parse().ok()?;
     (!ip.is_unspecified() && !ip.is_loopback()).then(|| nfs_net::wire::Addr::ip(ip.octets(), port()))
@@ -290,6 +291,9 @@ pub struct NetPlay {
     /// cleared by the first `0xC5` after it (0x48F8F5). PLAYGAME's wait (0x50CFA9) and the race
     /// frame's (0x4152E0, `while (… +0xC4) 0x4B0FA0`) both test it.
     go_wait: bool,
+    /// When `go_wait` went up. The browser's race-frame wait reads its age instead of the native
+    /// loop's own `Instant::now() + BARRIER_LIMIT` deadline (`NetPlay::go_hold`, the D12 glue).
+    go_since: Option<Instant>,
     /// `net+0x15C` — the room's clock word of that first `0xC5` (0x48F906)
     go_clock: Option<u32>,
     /// `net+0xC5` — "already reported back": cleared by `0xB3` (0x48F85A), set by the abort arms
@@ -407,6 +411,39 @@ pub struct BarrierRun {
     sent: bool,
     end: Instant,
     keys: KeyRing,
+}
+
+/// **Browser glue.** The PLAYGAME/launch sequence on wasm: the native paths block in
+/// [`NetPlay::wait_released`], [`NetPlay::launch_barrier`] and [`NetPlay::wait_go`], which call
+/// `std::thread::sleep`; on the browser's main thread that is `memory.atomic.wait32`, so the
+/// WebSocket's `onmessage` never runs and the barrier can never receive the host's round. The
+/// application advances this state from its frame loop instead.
+#[cfg(target_arch = "wasm32")]
+pub(crate) enum NetStart {
+    /// PLAYGAME's `0xB3` has not arrived yet (`net+0xC4` clear). The saved `.READY` rides along
+    /// (0x50CF0C's `setne bl`), for the send the first barrier's passing arms.
+    Release { me: u32, ready: bool },
+    /// The first launch barrier: after it the saved `.READY`, lowered by the missing-car check,
+    /// goes out again (0x50CFF1…).
+    Play1 { run: BarrierRun, me: u32, ready: bool },
+    /// The second launch barrier: after it step 9 (0x50D230…0x50D251) checks every room player's
+    /// `.READY` — a cleared one is the abort arm.
+    Play2 { run: BarrierRun },
+    /// Start the first barrier of 0x48D3D0 (`launch_begin`); its reset body runs only after it.
+    LaunchBegin,
+    /// 0x48D3D0's barrier, before the launch records go out.
+    LaunchFirst { run: BarrierRun },
+    /// The host's `0xBC` stream precedes its `0xBD`; passing means `NetRace` can be settled.
+    Launch { run: BarrierRun },
+}
+
+/// **Browser glue.** A barrier whose result the synchronous `start_race` does not have to wait for:
+/// the host waits for this machine's `0xBD` phases, so the frame loop keeps answering them while
+/// the browser is already in the race. `Go` is the three barriers of the race frame's set-up.
+#[cfg(target_arch = "wasm32")]
+pub(crate) enum BarrierJob {
+    Load(BarrierRun),
+    Go { runs: [BarrierRun; 3], index: usize },
 }
 
 /// One turn of 0x587CE0 per 1/64 s of real time.

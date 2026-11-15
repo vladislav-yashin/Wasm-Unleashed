@@ -54,6 +54,7 @@ pub struct Lobby {
     last_probe: Instant,
     who: String,
     /// a send error has been reported already (once per screen is enough)
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     warned: bool,
     /// whether the list is written through to [`comms_ip_list`] (off in the tests)
     pub(super) persist: bool,
@@ -122,6 +123,11 @@ pub fn game_name_path() -> std::path::PathBuf {
 impl Lobby {
     /// Open a browsing socket. Port 0, so a second copy on the same machine can browse too.
     pub fn open(who: &str) -> anyhow::Result<Self> {
+        // A browser has no LAN to browse: the lobby object only has to exist so the peer-to-peer
+        // screen's CONNECT button is live, and the typed address supplies the destination.
+        #[cfg(target_arch = "wasm32")]
+        let sock = CommSocket::relay_idle();
+        #[cfg(not(target_arch = "wasm32"))]
         let sock =
             CommSocket::bind_on(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)))?;
         Ok(Self {
@@ -180,6 +186,8 @@ impl Lobby {
     /// what [`nfs_net::socket::probe_targets`] starts with. Its other entries are platform glue
     /// and are labelled there. A typed or picked address is probed directly as well.
     pub fn poll(&mut self) {
+        // A browser has no UDP probe; the peer-to-peer screen's typed address is the only path.
+        #[cfg(not(target_arch = "wasm32"))]
         if self.last_probe.elapsed() >= Duration::from_secs(1) {
             let sent = self.net.probe_all(port());
             // macOS refuses local-network sends (EHOSTUNREACH / EPERM) until the user has allowed

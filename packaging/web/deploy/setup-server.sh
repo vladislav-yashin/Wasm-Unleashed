@@ -84,6 +84,44 @@ x-game: &game
     start_period: 10s
 
 services:
+  # The relay is shared by both colours and is not blue-green itself: it carries live WebSockets,
+  # so a restart ends their sessions. The deploy script replaces it only when its digest changes.
+  relay:
+    image: ${OPEN_UNLEASHED_RELAY_IMAGE:?OPEN_UNLEASHED_RELAY_IMAGE must be set by the deploy script}
+    restart: unless-stopped
+    read_only: true
+    # The relay only needs a port above 1024 and outbound UDP: no Linux capability, no extra process.
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 256m
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      RELAY_ALLOWED_ORIGINS: ${RELAY_ALLOWED_ORIGINS:-https://porsche.nfs.place}
+      RELAY_PORTS: ${RELAY_PORTS:-9442}
+      RELAY_ALLOW_CIDRS: ${RELAY_ALLOW_CIDRS:-}
+      RELAY_ALLOW_PRIVATE: ${RELAY_ALLOW_PRIVATE:-0}
+      RELAY_TRUSTED_PROXIES: ${RELAY_TRUSTED_PROXIES:-172.16.0.0/12}
+      RELAY_MAX_CONNECTIONS: ${RELAY_MAX_CONNECTIONS:-256}
+      RELAY_MAX_CONNECTIONS_PER_IP: ${RELAY_MAX_CONNECTIONS_PER_IP:-16}
+      RELAY_MAX_CONNECTIONS_PER_TARGET: ${RELAY_MAX_CONNECTIONS_PER_TARGET:-8}
+      RELAY_MAX_PPS: ${RELAY_MAX_PPS:-400}
+      RELAY_MAX_UPGRADES_PER_SEC: ${RELAY_MAX_UPGRADES_PER_SEC:-10}
+      RELAY_MAX_BYTES_PER_SEC: ${RELAY_MAX_BYTES_PER_SEC:-8388608}
+      RELAY_IDLE_TIMEOUT: ${RELAY_IDLE_TIMEOUT:-120}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "2", "-O", "/dev/null", "http://127.0.0.1:8090/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
   blue:
     <<: *game
     ports:
@@ -105,9 +143,10 @@ cat > "$DEPLOY_SCRIPT" <<'OPEN_UNLEASHED_REMOTE_EOF'
 #
 #   restrict,command="/usr/local/bin/open-unleashed-deploy" ssh-ed25519 AAAA...
 #
-# The command line is "deploy <image>@sha256:<digest>". The image must belong to
-# OPEN_UNLEASHED_IMAGE_REPO; arbitrary commands are rejected. An administrator
-# may run the script directly with the image reference as the only argument.
+# The command line is "deploy <image>@sha256:<digest> <relay-image>@sha256:<digest>".
+# The images must belong to OPEN_UNLEASHED_IMAGE_REPO and
+# OPEN_UNLEASHED_RELAY_IMAGE_REPO; arbitrary commands are rejected. An administrator
+# may run the script directly with both references as arguments.
 
 set -euo pipefail
 umask 077
@@ -125,6 +164,7 @@ COMPOSE_FILE="${OPEN_UNLEASHED_COMPOSE_FILE:-/opt/open-unleashed/compose.yaml}"
 ENV_FILE="${OPEN_UNLEASHED_ENV_FILE:-/etc/open-unleashed/deploy.env}"
 STATE_DIR="${OPEN_UNLEASHED_STATE_DIR:-/var/lib/open-unleashed}"
 IMAGE_REPO="${OPEN_UNLEASHED_IMAGE_REPO:-ghcr.io/vladislav-yashin/wasm-unleashed}"
+RELAY_IMAGE_REPO="${OPEN_UNLEASHED_RELAY_IMAGE_REPO:-ghcr.io/vladislav-yashin/wasm-unleashed-relay}"
 HEALTH_TIMEOUT="${OPEN_UNLEASHED_HEALTH_TIMEOUT:-90}"
 SETTLE_SECONDS="${OPEN_UNLEASHED_SETTLE_SECONDS:-10}"
 DRAIN_SECONDS="${OPEN_UNLEASHED_DRAIN_SECONDS:-10}"
@@ -142,6 +182,8 @@ COMPOSE_FILE="${OPEN_UNLEASHED_COMPOSE_FILE:-$COMPOSE_FILE}"
 STATE_DIR="${OPEN_UNLEASHED_STATE_DIR:-$STATE_DIR}"
 IMAGE_REPO="${OPEN_UNLEASHED_IMAGE_REPO:-$IMAGE_REPO}"
 IMAGE_REPO="${IMAGE_REPO,,}"
+RELAY_IMAGE_REPO="${OPEN_UNLEASHED_RELAY_IMAGE_REPO:-$RELAY_IMAGE_REPO}"
+RELAY_IMAGE_REPO="${RELAY_IMAGE_REPO,,}"
 HEALTH_TIMEOUT="${OPEN_UNLEASHED_HEALTH_TIMEOUT:-$HEALTH_TIMEOUT}"
 SETTLE_SECONDS="${OPEN_UNLEASHED_SETTLE_SECONDS:-$SETTLE_SECONDS}"
 DRAIN_SECONDS="${OPEN_UNLEASHED_DRAIN_SECONDS:-$DRAIN_SECONDS}"
@@ -158,23 +200,31 @@ if [[ -n "$PUBLIC_HEALTH_URL" ]]; then
 fi
 
 image=""
+relay=""
 if [[ -n "${SSH_ORIGINAL_COMMAND:-}" ]]; then
     [[ "$SSH_ORIGINAL_COMMAND" != *$'\n'* && "$SSH_ORIGINAL_COMMAND" != *$'\r'* ]] \
         || die "SSH command must be a single line"
-    read -r verb image extra <<<"$SSH_ORIGINAL_COMMAND"
+    read -r verb image relay extra <<<"$SSH_ORIGINAL_COMMAND"
     [[ -z "${extra:-}" ]] || die "unexpected arguments in SSH command"
-    [[ "$verb" == "deploy" && -n "$image" ]] || die "expected SSH command: deploy <image>"
-elif [[ $# -eq 1 ]]; then
+    [[ "$verb" == "deploy" && -n "$image" && -n "$relay" ]] \
+        || die "expected SSH command: deploy <image> <relay-image>"
+elif [[ $# -eq 2 ]]; then
     image="$1"
+    relay="$2"
 else
-    die "usage: open-unleashed-deploy <image>"
+    die "usage: open-unleashed-deploy <image> <relay-image>"
 fi
 
-if [[ "$image" != "$IMAGE_REPO@"* ]]; then
-    die "image must come from $IMAGE_REPO"
-fi
-digest="${image#"$IMAGE_REPO@"}"
-[[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || die "image must be pinned by sha256 digest"
+check_image() {
+    local ref="$1" repo="$2" label="$3" digest
+    if [[ "$ref" != "$repo@"* ]]; then
+        die "$label image must come from $repo"
+    fi
+    digest="${ref#"$repo@"}"
+    [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || die "$label image must be pinned by sha256 digest"
+}
+check_image "$image" "$IMAGE_REPO" "game"
+check_image "$relay" "$RELAY_IMAGE_REPO" "relay"
 
 exec 9>"$STATE_DIR/deploy.lock"
 flock -n 9 || die "another deployment is already running"
@@ -185,6 +235,7 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 export OPEN_UNLEASHED_IMAGE="$image"
+export OPEN_UNLEASHED_RELAY_IMAGE="$relay"
 
 data_dir="${NFS_WEB_DATA:-/srv/open-unleashed/web-data}"
 [[ -d "$data_dir" ]] || die "web data directory not found: $data_dir"
@@ -277,6 +328,42 @@ log "removing any previous $target container"
 
 log "pulling $image"
 "${COMPOSE[@]}" pull "$target" >/dev/null
+
+# The relay is shared by both colours and carries live WebSockets: replacing it ends those
+# sessions. Only do that when its digest actually changed. The game protocol is versioned
+# separately, so the old game keeps working with a new relay if the switch below is rolled back.
+log "pulling relay $relay"
+"${COMPOSE[@]}" pull relay >/dev/null
+running_relay="$("${COMPOSE[@]}" ps --quiet relay 2>/dev/null || true)"
+running_relay_image=""
+if [[ -n "$running_relay" ]]; then
+    running_relay_image="$(docker inspect --format '{{.Config.Image}}' "$running_relay" 2>/dev/null || true)"
+fi
+if [[ "$running_relay_image" != "$relay" ]]; then
+    log "starting relay ${running_relay_image:-none} -> $relay"
+    "${COMPOSE[@]}" up --detach --no-deps --force-recreate relay >/dev/null
+    relay_container="$("${COMPOSE[@]}" ps --quiet relay)"
+    [[ -n "$relay_container" ]] || die "could not find the relay container"
+    deadline=$((SECONDS + HEALTH_TIMEOUT))
+    relay_healthy=0
+    while (( SECONDS < deadline )); do
+        status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$relay_container" 2>/dev/null || echo missing)"
+        case "$status" in
+            healthy)
+                relay_healthy=1
+                break
+                ;;
+            unhealthy|exited|dead|missing)
+                log "relay is $status"
+                break
+                ;;
+        esac
+        sleep 1
+    done
+    if [[ "$relay_healthy" -ne 1 ]]; then
+        die "the relay did not become healthy; the previous game build is still active"
+    fi
+fi
 
 log "starting $target"
 "${COMPOSE[@]}" up --detach --no-deps --force-recreate "$target" >/dev/null
@@ -390,6 +477,42 @@ NFS_WEB_DATA=/srv/open-unleashed/web-data
 BLUE_PORT=18080
 GREEN_PORT=18081
 
+# The relay image. The deploy script passes the exact digest; this is the repository it must
+# belong to. It is a separate image because the relay has no game assets and runs unprivileged.
+OPEN_UNLEASHED_RELAY_IMAGE_REPO=ghcr.io/vladislav-yashin/wasm-unleashed-relay
+
+# The browser origin allowed to open a relay WebSocket. Use the public site, comma-separated for
+# more than one. This is the CSRF/abuse guard for a public relay, so do not leave it empty.
+RELAY_ALLOWED_ORIGINS=https://porsche.nfs.place
+
+# The only UDP destination ports a browser may reach (the game's own port is 9442).
+RELAY_PORTS=9442
+
+# Optional destination CIDR allowlist, comma-separated. When set it replaces the default policy:
+# only these networks are reachable. Leave it empty to reach global unicast only — loopback,
+# link-local, RFC1918, carrier-grade NAT, documentation, benchmarking, multicast, broadcast and
+# reserved ranges are always refused.
+# RELAY_ALLOW_CIDRS=203.0.113.0/24
+
+# Allow private and other non-public destinations. LAN development only: a public relay must not
+# be usable to probe the network it runs on. 0 or unset refuses them.
+RELAY_ALLOW_PRIVATE=0
+
+# The networks whose X-Forwarded-For the relay believes. The compose network is the proxy; a direct
+# client has a public address outside it, so its own header is ignored. Keep it to the compose /
+# docker bridge ranges.
+RELAY_TRUSTED_PROXIES=172.16.0.0/12
+
+# Optional relay limits. The bandwidth budget is the deployment's egress ceiling in bytes per second
+# in each direction; keep it above what the concurrent players need (a session uses about 10 KB/s).
+# RELAY_MAX_CONNECTIONS=256
+# RELAY_MAX_CONNECTIONS_PER_IP=16
+# RELAY_MAX_CONNECTIONS_PER_TARGET=8
+# RELAY_MAX_PPS=400
+# RELAY_MAX_UPGRADES_PER_SEC=10
+# RELAY_MAX_BYTES_PER_SEC=8388608
+# RELAY_IDLE_TIMEOUT=120
+
 # Optional public health check performed after switching upstreams.
 # DEPLOY_HEALTH_URL=https://porsche.nfs.place/healthz
 
@@ -401,7 +524,7 @@ GREEN_PORT=18081
 # OPEN_UNLEASHED_STOP_GRACE_SECONDS=30
 OPEN_UNLEASHED_ENV_EOF
 chmod 0644 "$ENV_FILE"
-    echo "Installed $ENV_FILE. Review the data path and ports."
+    echo "Installed $ENV_FILE. Review the data path, the relay image repository and RELAY_ALLOWED_ORIGINS."
 fi
 
 USER_HOME="$(getent passwd "$DEPLOY_USER" | cut -d: -f6)"

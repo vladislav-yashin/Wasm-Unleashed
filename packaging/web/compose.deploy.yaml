@@ -32,6 +32,44 @@ x-game: &game
     start_period: 10s
 
 services:
+  # The relay is shared by both colours and is not blue-green itself: it carries live WebSockets,
+  # so a restart ends their sessions. The deploy script replaces it only when its digest changes.
+  relay:
+    image: ${OPEN_UNLEASHED_RELAY_IMAGE:?OPEN_UNLEASHED_RELAY_IMAGE must be set by the deploy script}
+    restart: unless-stopped
+    read_only: true
+    # The relay only needs a port above 1024 and outbound UDP: no Linux capability, no extra process.
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 256m
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      RELAY_ALLOWED_ORIGINS: ${RELAY_ALLOWED_ORIGINS:-https://porsche.nfs.place}
+      RELAY_PORTS: ${RELAY_PORTS:-9442}
+      RELAY_ALLOW_CIDRS: ${RELAY_ALLOW_CIDRS:-}
+      RELAY_ALLOW_PRIVATE: ${RELAY_ALLOW_PRIVATE:-0}
+      RELAY_TRUSTED_PROXIES: ${RELAY_TRUSTED_PROXIES:-172.16.0.0/12}
+      RELAY_MAX_CONNECTIONS: ${RELAY_MAX_CONNECTIONS:-256}
+      RELAY_MAX_CONNECTIONS_PER_IP: ${RELAY_MAX_CONNECTIONS_PER_IP:-16}
+      RELAY_MAX_CONNECTIONS_PER_TARGET: ${RELAY_MAX_CONNECTIONS_PER_TARGET:-8}
+      RELAY_MAX_PPS: ${RELAY_MAX_PPS:-400}
+      RELAY_MAX_UPGRADES_PER_SEC: ${RELAY_MAX_UPGRADES_PER_SEC:-10}
+      RELAY_MAX_BYTES_PER_SEC: ${RELAY_MAX_BYTES_PER_SEC:-8388608}
+      RELAY_IDLE_TIMEOUT: ${RELAY_IDLE_TIMEOUT:-120}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "2", "-O", "/dev/null", "http://127.0.0.1:8090/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
   blue:
     <<: *game
     ports:

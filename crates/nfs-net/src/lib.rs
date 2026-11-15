@@ -16,6 +16,7 @@ pub mod launchcar;
 pub mod msg;
 pub mod options;
 pub mod outbox;
+pub mod relay;
 pub mod reliable;
 pub mod room;
 pub mod session;

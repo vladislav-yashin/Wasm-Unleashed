@@ -57,7 +57,7 @@ if [[ -f "$ENV_FILE" ]]; then
     echo "Keeping existing $ENV_FILE."
 else
 # @@EMBED_ENV@@
-    echo "Installed $ENV_FILE. Review the data path and ports."
+    echo "Installed $ENV_FILE. Review the data path, the relay image repository and RELAY_ALLOWED_ORIGINS."
 fi
 
 USER_HOME="$(getent passwd "$DEPLOY_USER" | cut -d: -f6)"

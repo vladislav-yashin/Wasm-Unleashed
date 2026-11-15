@@ -6,9 +6,10 @@
 #
 #   restrict,command="/usr/local/bin/open-unleashed-deploy" ssh-ed25519 AAAA...
 #
-# The command line is "deploy <image>@sha256:<digest>". The image must belong to
-# OPEN_UNLEASHED_IMAGE_REPO; arbitrary commands are rejected. An administrator
-# may run the script directly with the image reference as the only argument.
+# The command line is "deploy <image>@sha256:<digest> <relay-image>@sha256:<digest>".
+# The images must belong to OPEN_UNLEASHED_IMAGE_REPO and
+# OPEN_UNLEASHED_RELAY_IMAGE_REPO; arbitrary commands are rejected. An administrator
+# may run the script directly with both references as arguments.
 
 set -euo pipefail
 umask 077
@@ -26,6 +27,7 @@ COMPOSE_FILE="${OPEN_UNLEASHED_COMPOSE_FILE:-/opt/open-unleashed/compose.yaml}"
 ENV_FILE="${OPEN_UNLEASHED_ENV_FILE:-/etc/open-unleashed/deploy.env}"
 STATE_DIR="${OPEN_UNLEASHED_STATE_DIR:-/var/lib/open-unleashed}"
 IMAGE_REPO="${OPEN_UNLEASHED_IMAGE_REPO:-ghcr.io/vladislav-yashin/wasm-unleashed}"
+RELAY_IMAGE_REPO="${OPEN_UNLEASHED_RELAY_IMAGE_REPO:-ghcr.io/vladislav-yashin/wasm-unleashed-relay}"
 HEALTH_TIMEOUT="${OPEN_UNLEASHED_HEALTH_TIMEOUT:-90}"
 SETTLE_SECONDS="${OPEN_UNLEASHED_SETTLE_SECONDS:-10}"
 DRAIN_SECONDS="${OPEN_UNLEASHED_DRAIN_SECONDS:-10}"
@@ -43,6 +45,8 @@ COMPOSE_FILE="${OPEN_UNLEASHED_COMPOSE_FILE:-$COMPOSE_FILE}"
 STATE_DIR="${OPEN_UNLEASHED_STATE_DIR:-$STATE_DIR}"
 IMAGE_REPO="${OPEN_UNLEASHED_IMAGE_REPO:-$IMAGE_REPO}"
 IMAGE_REPO="${IMAGE_REPO,,}"
+RELAY_IMAGE_REPO="${OPEN_UNLEASHED_RELAY_IMAGE_REPO:-$RELAY_IMAGE_REPO}"
+RELAY_IMAGE_REPO="${RELAY_IMAGE_REPO,,}"
 HEALTH_TIMEOUT="${OPEN_UNLEASHED_HEALTH_TIMEOUT:-$HEALTH_TIMEOUT}"
 SETTLE_SECONDS="${OPEN_UNLEASHED_SETTLE_SECONDS:-$SETTLE_SECONDS}"
 DRAIN_SECONDS="${OPEN_UNLEASHED_DRAIN_SECONDS:-$DRAIN_SECONDS}"
@@ -59,23 +63,31 @@ if [[ -n "$PUBLIC_HEALTH_URL" ]]; then
 fi
 
 image=""
+relay=""
 if [[ -n "${SSH_ORIGINAL_COMMAND:-}" ]]; then
     [[ "$SSH_ORIGINAL_COMMAND" != *$'\n'* && "$SSH_ORIGINAL_COMMAND" != *$'\r'* ]] \
         || die "SSH command must be a single line"
-    read -r verb image extra <<<"$SSH_ORIGINAL_COMMAND"
+    read -r verb image relay extra <<<"$SSH_ORIGINAL_COMMAND"
     [[ -z "${extra:-}" ]] || die "unexpected arguments in SSH command"
-    [[ "$verb" == "deploy" && -n "$image" ]] || die "expected SSH command: deploy <image>"
-elif [[ $# -eq 1 ]]; then
+    [[ "$verb" == "deploy" && -n "$image" && -n "$relay" ]] \
+        || die "expected SSH command: deploy <image> <relay-image>"
+elif [[ $# -eq 2 ]]; then
     image="$1"
+    relay="$2"
 else
-    die "usage: open-unleashed-deploy <image>"
+    die "usage: open-unleashed-deploy <image> <relay-image>"
 fi
 
-if [[ "$image" != "$IMAGE_REPO@"* ]]; then
-    die "image must come from $IMAGE_REPO"
-fi
-digest="${image#"$IMAGE_REPO@"}"
-[[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || die "image must be pinned by sha256 digest"
+check_image() {
+    local ref="$1" repo="$2" label="$3" digest
+    if [[ "$ref" != "$repo@"* ]]; then
+        die "$label image must come from $repo"
+    fi
+    digest="${ref#"$repo@"}"
+    [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || die "$label image must be pinned by sha256 digest"
+}
+check_image "$image" "$IMAGE_REPO" "game"
+check_image "$relay" "$RELAY_IMAGE_REPO" "relay"
 
 exec 9>"$STATE_DIR/deploy.lock"
 flock -n 9 || die "another deployment is already running"
@@ -86,6 +98,7 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 export OPEN_UNLEASHED_IMAGE="$image"
+export OPEN_UNLEASHED_RELAY_IMAGE="$relay"
 
 data_dir="${NFS_WEB_DATA:-/srv/open-unleashed/web-data}"
 [[ -d "$data_dir" ]] || die "web data directory not found: $data_dir"
@@ -178,6 +191,42 @@ log "removing any previous $target container"
 
 log "pulling $image"
 "${COMPOSE[@]}" pull "$target" >/dev/null
+
+# The relay is shared by both colours and carries live WebSockets: replacing it ends those
+# sessions. Only do that when its digest actually changed. The game protocol is versioned
+# separately, so the old game keeps working with a new relay if the switch below is rolled back.
+log "pulling relay $relay"
+"${COMPOSE[@]}" pull relay >/dev/null
+running_relay="$("${COMPOSE[@]}" ps --quiet relay 2>/dev/null || true)"
+running_relay_image=""
+if [[ -n "$running_relay" ]]; then
+    running_relay_image="$(docker inspect --format '{{.Config.Image}}' "$running_relay" 2>/dev/null || true)"
+fi
+if [[ "$running_relay_image" != "$relay" ]]; then
+    log "starting relay ${running_relay_image:-none} -> $relay"
+    "${COMPOSE[@]}" up --detach --no-deps --force-recreate relay >/dev/null
+    relay_container="$("${COMPOSE[@]}" ps --quiet relay)"
+    [[ -n "$relay_container" ]] || die "could not find the relay container"
+    deadline=$((SECONDS + HEALTH_TIMEOUT))
+    relay_healthy=0
+    while (( SECONDS < deadline )); do
+        status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$relay_container" 2>/dev/null || echo missing)"
+        case "$status" in
+            healthy)
+                relay_healthy=1
+                break
+                ;;
+            unhealthy|exited|dead|missing)
+                log "relay is $status"
+                break
+                ;;
+        esac
+        sleep 1
+    done
+    if [[ "$relay_healthy" -ne 1 ]]; then
+        die "the relay did not become healthy; the previous game build is still active"
+    fi
+fi
 
 log "starting $target"
 "${COMPOSE[@]}" up --detach --no-deps --force-recreate "$target" >/dev/null

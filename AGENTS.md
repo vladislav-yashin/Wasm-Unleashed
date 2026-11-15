@@ -5,8 +5,9 @@
 Wasm Unleashed is a Rust reimplementation of Need for Speed: Porsche Unleashed.
 The delivery target is a self-contained browser game compiled to
 `wasm32-unknown-unknown`. Desktop and mobile browsers are in scope. Native CLI
-tools remain useful for asset preparation. Browser multiplayer is deferred to a
-later stage.
+tools remain useful for asset preparation. Browser multiplayer joins a native
+host at an IPv4 address through a WebSocket↔UDP relay; hosting and LAN discovery
+remain native features because browsers cannot open UDP sockets.
 
 Preserve the original game rules, physics, AI, file formats and save compatibility.
 Keep platform changes separate from gameplay changes. Write code comments,
@@ -20,7 +21,9 @@ English and Russian user documentation.
 - `crates/nfs-platform`: platform filesystem, path predicates, clocks and scoped
   work. Browser files expose resources that JavaScript has already prepared.
 - Other `crates/nfs-*` packages implement formats, assets, rendering, audio,
-  input, physics and the original network protocol.
+  input, physics and the original network protocol. `crates/nfs-net` also defines
+  the browser relay framing (`src/relay.rs`); `tools/net-relay` is the separate
+  Rust gateway that turns one WebSocket into one connected UDP flow.
 - `packaging/web`: browser shell, HTTP asset source, virtual filesystem,
   IndexedDB persistence and Docker/Nginx configuration.
 - `tools/web`: build, asset packaging, local serving and optional browser checks.
@@ -50,14 +53,16 @@ Run checks appropriate to the change:
 
 ```sh
 cargo +stable check --locked -p open-unleashed --target wasm32-unknown-unknown
-cargo +stable test --locked -p nfs-formats -p nfs-net --lib
+cargo +stable test --locked -p nfs-formats -p nfs-net --lib -p nfs-relay
 python3 -m unittest discover -s tools/web -p 'test_*.py'
-node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/exit-game.test.mjs
+node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/exit-game.test.mjs packaging/web/net.test.mjs
 python3 tools/web/build.py
 ```
 
-For local play, run `python3 tools/web/serve.py` and open
-`http://127.0.0.1:8080`. The default directories are `dist/` and `web-data/`.
+For local play, run `make serve` (it builds and starts the relay and serves
+`dist/`) and open `http://127.0.0.1:8080`. `python3 tools/web/serve.py` without
+`--relay` is the static-only server. The default directories are `dist/` and
+`web-data/`.
 Remote deployment needs HTTPS for browser APIs and CORS if assets use a separate
 origin. Stop any local test server you started when the task is complete; do not
 stop a server owned by the user or another task.

@@ -10,14 +10,21 @@ containers behind Caddy on the host.
 push to main
   test/build WASM and web modules
   build and push ghcr.io/<owner>/<repo>@sha256:...
+  build and push ghcr.io/<owner>/<repo>-relay@sha256:...
   wait for the production environment approval
-  ssh deploy@host "deploy ghcr.io/<owner>/<repo>@sha256:..."
+  ssh deploy@host "deploy <game-image>@sha256:... <relay-image>@sha256:..."
 ```
 
-The server script pulls the exact digest, starts the inactive blue-green slot,
-waits for its health check, drains the active slot and only then stops it.
-Caddy sends traffic to the first healthy upstream, so the switch does not rely
-on a rolling `docker compose up` restart.
+The server script pulls the exact digests, updates the shared relay when its
+digest changed, starts the inactive blue-green slot, waits for its health check,
+drains the active slot and only then stops it. Caddy sends traffic to the first
+healthy upstream, so the switch does not rely on a rolling `docker compose up`
+restart.
+
+The relay is a separate image and a single service: it holds live WebSockets,
+so replacing it ends any network session in progress. It is only recreated when
+its digest changes. The game protocol is unchanged, so the previous game build
+keeps working with a new relay if a deployment is rolled back.
 
 PRs and pushes to other branches run tests and the WASM build, but cannot reach
 the production environment or its secrets.
@@ -29,9 +36,11 @@ the production environment or its secrets.
 - Caddy running on the host and terminating HTTPS.
 - Prepared original game data under a directory mounted at `/data`.
 - `curl` on the host if `DEPLOY_HEALTH_URL` is configured.
+- Outbound UDP from the relay to the game hosts players join (port 9442 by default).
 
 The application container never publishes a port on a public interface. The
-production compose file binds both slots to loopback:
+relay is reachable only through nginx on the compose network; nginx proxies
+`/relay` to it. The production compose file binds both slots to loopback:
 
 - `127.0.0.1:18080` - blue
 - `127.0.0.1:18081` - green
@@ -40,6 +49,40 @@ Ports and the data path are configured in `/etc/open-unleashed/deploy.env`.
 Enable `DEPLOY_HEALTH_URL=https://porsche.nfs.place/healthz` after the Caddy
 configuration has been applied; this makes the deploy verify the switch through
 the real HTTPS endpoint.
+
+## Relay threat model
+
+The relay is a WebSocket to UDP gateway, not a general proxy, but it is still an
+unauthenticated way to send UDP from the server's address. What bounds it:
+
+- One destination per WebSocket, named in the URL. It must be an IPv4 literal on
+  `RELAY_PORTS` (9442 by default) and global unicast: loopback, link-local,
+  RFC1918, carrier-grade NAT, documentation, benchmarking, multicast, broadcast
+  and reserved ranges are refused. `RELAY_ALLOW_CIDRS` replaces that rule with
+  an explicit list; `RELAY_ALLOW_PRIVATE=1` reopens private space and belongs on
+  a LAN development machine only.
+- The relay never interprets the game datagram, and a reply never goes to a third
+  party: the host answers the relay, and the relay answers the browser that
+  opened the socket. It is therefore neither a reflector nor an amplifier.
+- `RELAY_ALLOWED_ORIGINS` stops a foreign page from opening the socket. It is a
+  CSRF guard, not authentication: a script sets `Origin` itself.
+- The limits are per connection (`RELAY_MAX_PPS`), per client address
+  (`RELAY_MAX_CONNECTIONS_PER_IP` and `RELAY_MAX_UPGRADES_PER_SEC`), per
+  destination (`RELAY_MAX_CONNECTIONS_PER_TARGET`), across the deployment
+  (`RELAY_MAX_CONNECTIONS`) and in bytes (`RELAY_MAX_BYTES_PER_SEC`), which is
+  what bounds the egress bill. Every WebSocket frame spends the packet budget,
+  and only a game datagram refreshes `RELAY_IDLE_TIMEOUT`, so pings or text
+  frames cannot hold a connection slot open.
+- `RELAY_TRUSTED_PROXIES` is the only reason a forwarded header is believed. The
+  compose network is the proxy; a public peer means a direct connection and its
+  `X-Forwarded-For` is ignored. nginx recovers the browser's address with
+  `real_ip`, so both the edge's `limit_conn` and the relay's per-IP limit count
+  clients rather than the docker gateway; without it every player shares one
+  bucket and sixteen concurrent sessions is the whole site's ceiling.
+
+What remains and cannot be configured away: while the site is public, anyone can
+use the relay as a one-port UDP proxy from the server's address. Keep
+`RELAY_PORTS` minimal and watch the bandwidth-budget log line.
 
 ## One-time server setup
 
@@ -85,9 +128,11 @@ The authorized key can only run:
 /usr/local/bin/open-unleashed-deploy
 ```
 
-The helper accepts one argument: a digest from the configured GHCR repository.
-It rejects other commands and never evaluates input as shell code. It also
-requires the prepared data directory to contain `manifest.json`.
+The helper accepts two arguments: the game image and the relay image, both pinned
+by digest and each from its configured GHCR repository
+(`OPEN_UNLEASHED_IMAGE_REPO` and `OPEN_UNLEASHED_RELAY_IMAGE_REPO`). It rejects
+other commands and never evaluates input as shell code. It also requires the
+prepared data directory to contain `manifest.json`.
 
 The script prints the values for the GitHub production environment. Store the
 private key in `DEPLOY_SSH_KEY`, then remove it from the server. Re-run the
@@ -144,10 +189,11 @@ approve the `production` environment: anyone who can change the workflow and
 approve a deployment can use the deploy key, even though the key itself is
 restricted to one remote command.
 
-The image is public, so the server needs no registry credentials. After the
-first image push, open the package settings of the GHCR package and set its
-visibility to public before approving the first deployment. The image contains
-only the open-source web build; it contains no original game data.
+Both images are public, so the server needs no registry credentials. After the
+first pushes, open the package settings of both GHCR packages (the game and
+`<repo>-relay`) and set their visibility to public before approving the first
+deployment. They contain only the open-source build; no original game data is
+included.
 
 ## Caddy
 
@@ -167,7 +213,8 @@ changed, adjust `OPEN_UNLEASHED_SETTLE_SECONDS` and
 ## Deployment sequence
 
 1. The inactive slot is removed if a previous failed attempt left it behind.
-2. The new digest is pulled.
+2. The new digests are pulled, and the relay is recreated first if its digest
+   changed; the relay must become healthy before the game slot is touched.
 3. The inactive slot starts with the new image.
 4. Docker health and the internal `index.html` request must succeed.
 5. Caddy is given time to observe the new upstream.
@@ -181,7 +228,9 @@ If startup or health checks fail, the new container is removed and the old slot
 keeps serving. If the public probe fails after a drain, the helper restores the
 old upstream before removing the new one.
 
-The previous image digest is stored in `/var/lib/open-unleashed/image.previous`.
+The previous game image digest is stored in `/var/lib/open-unleashed/image.previous`.
+The relay digest is not stored separately: `docker inspect` on the running relay
+container reports it, and a rollback passes both the old game and relay digests.
 
 ## Operation
 
@@ -196,17 +245,20 @@ docker ps --filter name=open-unleashed
 docker logs --tail=100 open-unleashed-blue-1
 docker logs --tail=100 open-unleashed-green-1
 
-# Compose commands need the image reference used by the running container.
+# Compose commands need the image references used by the running containers.
 export OPEN_UNLEASHED_IMAGE="$(cat /var/lib/open-unleashed/image)"
+export OPEN_UNLEASHED_RELAY_IMAGE="$(docker inspect --format '{{.Config.Image}}' \
+  "$(docker compose --env-file /etc/open-unleashed/deploy.env ps --quiet relay)")"
 cd /opt/open-unleashed
 docker compose --env-file /etc/open-unleashed/deploy.env ps
 ```
 
-Manual rollback to an older digest:
+Manual rollback to older digests:
 
 ```sh
 sudo -u open-unleashed-deployer /usr/local/bin/open-unleashed-deploy \
-  ghcr.io/vladislav-yashin/wasm-unleashed@sha256:...
+  ghcr.io/vladislav-yashin/wasm-unleashed@sha256:... \
+  ghcr.io/vladislav-yashin/wasm-unleashed-relay@sha256:...
 ```
 
 The helper alternates slots, so a rollback is the same blue-green operation as a

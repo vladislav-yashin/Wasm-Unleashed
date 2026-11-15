@@ -1,4 +1,23 @@
 services:
+  # The WebSocket to UDP relay. The game container proxies /relay to it; no port is published.
+  relay:
+    build:
+      context: ../..
+      dockerfile: packaging/web/relay.Dockerfile
+    expose:
+      - "8090"
+    environment:
+      # A local stack may be opened through 127.0.0.1 or the LAN address; the relay logs a warning
+      # when no origin is named. A public deployment sets its exact origin instead.
+      RELAY_ALLOWED_ORIGINS: ${RELAY_ALLOWED_ORIGINS:-}
+      RELAY_PORTS: ${RELAY_PORTS:-9442}
+      # A development stack joins native hosts on the local network, which a public relay refuses.
+      RELAY_ALLOW_PRIVATE: ${RELAY_ALLOW_PRIVATE:-1}
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+
   game:
     build:
       context: ../..
@@ -7,4 +26,6 @@ services:
       - "127.0.0.1:8080:8080"
     volumes:
       - ${NFS_WEB_DATA:-../../web-data}:/usr/share/nginx/html/data:ro
+    depends_on:
+      - relay
     restart: unless-stopped

@@ -12,6 +12,7 @@ members = [
     "crates/nfs-net",
     "crates/nfs-game",
     "crates/open-unleashed",
+    "tools/net-relay",
     "tools/asset-inspector",
     "tools/asset-extractor",
     "tools/track-viewer",
