@@ -42,8 +42,8 @@
 #render-size{font-size:.7rem;opacity:.75;font-variant-numeric:tabular-nums;min-width:4.5rem;text-align:right}
 
 /* The loading shell stays independent of the game's canvas and input layouts. */
-#loader{box-sizing:border-box;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right));overflow:auto;background:radial-gradient(ellipse at top,#d6b47909,transparent 60%),#191916;color:#eee8da}
-.loading-card{box-sizing:border-box;display:grid;grid-template-columns:1fr 1.1fr;width:min(100%,1040px);margin:auto;border:1px solid #a7987a55;border-radius:0;overflow:hidden;background:#24241f;box-shadow:0 30px 100px #0004}
+#loader{box-sizing:border-box;height:100dvh;container-type:size;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));overflow:auto;justify-content:center;justify-content:safe center;background:radial-gradient(ellipse at top,#d6b47909,transparent 60%),#191916;color:#eee8da}
+.loading-card{box-sizing:border-box;display:grid;grid-template-columns:1fr 1.1fr;width:min(100%,1040px);margin:0;flex:none;border:1px solid #a7987a55;border-radius:0;overflow:hidden;background:#24241f;box-shadow:0 30px 100px #0004}
 .loading-art{min-height:540px;border-right:1px solid #a7987a40;background:linear-gradient(0deg,#24241f33,#24241f00),url('porsche-993-alpine.webp') 66% center/cover}
 .loading-content{padding:clamp(24px,4vw,48px);min-width:0}
 .loading-brand{display:flex;align-items:center;gap:12px;color:#eee8da;text-decoration:none;font-size:12px;font-weight:800;letter-spacing:.04em}.loading-brand>span{background:#873d32;color:#eee8da;border:1px solid #c98e6b;transform:skew(-7deg);font-size:20px;font-style:italic;letter-spacing:-.06em;padding:6px 9px;border-radius:0}
@@ -57,8 +57,14 @@
 .loading-actions .unlock-name{display:flex;align-items:center;gap:8px;font-size:12px;color:#aaa697}.loading-actions .unlock-name input{box-sizing:border-box;width:9rem;font:inherit;font-size:13px;padding:8px 10px;background:#191916;color:#eee8da;border:1px solid #82755e;border-radius:0}.loading-actions .unlock-name input:disabled{opacity:.55}.loading-actions .unlock-name input:focus-visible{outline:2px solid #d6b479;outline-offset:2px}
 #loading-details{margin-top:24px;font-size:12px;color:#aaa697}#loading-details summary{cursor:pointer}#loading-error{white-space:pre-wrap;overflow-wrap:anywhere;max-height:120px;overflow:auto;font-size:11px;line-height:1.6;color:#f1b5a5}#loader[data-state="error"] #status{color:#f1b5a5}#loader[data-state="loading"]{cursor:progress}
 @keyframes loading-sweep{from{background-position:200% 0}to{background-position:0 0}}
-@media(max-width:700px){.loading-card{grid-template-columns:1fr;max-width:460px}.loading-art{min-height:0;height:160px;border-right:0;border-bottom:1px solid #a7987a40;background-position:center 62%}.loading-eyebrow{margin-top:24px}#loader{justify-content:flex-start}.loading-content{padding:24px}.loading-steps{gap:5px}.loading-steps li{font-size:11px;gap:5px}}
+@media(max-width:700px){.loading-card{grid-template-columns:1fr;max-width:460px}.loading-art{min-height:0;height:160px;border-right:0;border-bottom:1px solid #a7987a40;background-position:center 62%}.loading-eyebrow{margin-top:24px}.loading-content{padding:24px}.loading-steps{gap:5px}.loading-steps li{font-size:11px;gap:5px}}
 @media(max-height:620px) and (min-width:701px){.loading-art{min-height:0}.loading-content{padding:24px}.loading-eyebrow{margin-top:20px}#status{margin-bottom:14px}.loading-steps{margin-bottom:14px}.loading-hint{margin:14px 0}}
+/* Phones keep the primary action above the fold. Container queries follow the rendered height of the
+   loader (`100dvh`), while a media height query would over-report it under mobile browser toolbars.
+   Thresholds are the content box, i.e. the viewport minus the 16px padding on each side. */
+@media(max-width:700px){@container (max-height:728px){.loading-hint{display:none}.loading-actions{gap:12px}}@container (max-height:588px){.loading-art{display:none}}}
+/* Landscape phones are wider than the phone layout but just as short: drop the hint so Start stays visible. */
+@media(any-pointer:coarse){@container (max-height:520px){.loading-hint{display:none}.loading-actions{gap:12px}}}
 @media(prefers-reduced-motion:reduce){#progress:indeterminate{animation:none}}
 
 /* In-session preparation is a small progress panel; keep the game visible. */
