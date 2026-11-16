@@ -72,3 +72,36 @@ Wasm Unleashed — форк проекта **OpenUnleashed**. Спасибо е�
 Tailwind CSS. Для canonical и sitemap передайте настоящий адрес сайта:
 `python3 tools/web/build.py --site-url https://your-host.example/`.
 Подробности: [лендинг и SEO](packaging/web/README.md#landing-page-and-seo).
+
+### Мод-паки
+
+На экране запуска можно выбрать паки, заменяющие файлы оригинальной игры.
+При конфликте приоритет имеет последний выбранный пак в списке. Для изменения
+набора после запуска перезагрузите страницу. Сохранения общие для всех наборов.
+
+В каталоге пака создайте `mod.json` и положите заменяемые файлы по путям от корня
+игры, например `GameData/CarModel/993.crp`:
+
+```json
+{
+  "id": "custom-cars",
+  "name": "Новые машины",
+  "description": "Замена моделей и текстур машин",
+  "enabled_by_default": false
+}
+```
+
+```sh
+make mod-pack MOD_DIR=/path/to/custom-cars
+make deploy-mod MOD_DIR=/path/to/custom-cars DEPLOY_SSH_HOST=server.example \
+  DEPLOY_SSH_USER=admin DEPLOY_DATA_DIR=/srv/open-unleashed/web-data
+```
+
+Первая команда собирает пак в `WEB_DATA` (по умолчанию `web-data`), вторая собирает
+и отправляет только этот пак на сервер. Для деплоя нужны SSH и rsync, на сервере —
+rsync, Python 3 и право записи в каталог данных, смонтированный как `/data`.
+Ограниченный SSH-ключ для деплоя Docker-образов для этого не подходит.
+Оригинальный манифест и исходная установка не изменяются; перезапуск контейнеров
+для обновления паков не нужен. Новые паки добавляются в конец списка, обновления
+существующего `id` сохраняют порядок. Подробности формата и удаления паков:
+[инструкция для браузерной версии](packaging/web/README.md#mod-packs).

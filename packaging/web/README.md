@@ -280,3 +280,50 @@ a download fails, without discarding the active game. Its 640×480 picture is sc
 to fit the canvas with the 4:3 aspect kept, as the front-end screens are. The
 artwork, branding and startup steps appear only at first launch.
 All loading UI strings are included in the six existing shell locales.
+
+## Mod packs
+
+Packs overlay `/game` resources before launch. The launch screen lists their names,
+descriptions and checkboxes, initially set from `enabled_by_default`. Packs apply
+in catalog order; the last selected pack wins each path conflict. Reload to change
+packs after starting. Saves remain under `/saves` and are shared between selections.
+
+Create a directory with `mod.json` and replacement files at their game-relative
+paths (for example `GameData/CarModel/993.crp`). Root configuration files are also
+supported. Paths are case-insensitive; duplicate paths with different case are rejected.
+The source installation is never modified. Do not commit original or derived game assets.
+
+```json
+{
+  "id": "custom-cars",
+  "name": "Custom cars",
+  "description": "Replacement car models and textures",
+  "enabled_by_default": false
+}
+```
+
+```sh
+# Publish locally into the same data directory as the base manifest:
+make mod-pack MOD_DIR=/path/to/custom-cars
+# Build just this pack and upload it to an existing server:
+make deploy-mod MOD_DIR=/path/to/custom-cars DEPLOY_SSH_HOST=server.example \
+  DEPLOY_SSH_USER=admin DEPLOY_DATA_DIR=/srv/open-unleashed/web-data
+```
+
+`WEB_DATA` sets the local output directory. Deployment uses `DEPLOY_SSH_PORT`
+(default 22), SSH and rsync locally, and rsync plus Python 3 on the Linux server.
+The SSH account must have write access to `DEPLOY_DATA_DIR`, the directory mounted
+as `/data` by the running containers. The restricted image-deploy SSH key is not
+sufficient for data uploads. No container restart is needed once the application
+version supporting packs is deployed.
+
+Original `manifest.json` stays unchanged. Packs share hash-addressed `objects/`
+(including compressed representations and segmented music), have immutable
+`mods/<id>/<hash>.json` manifests and are listed in `mods.json`. Server deployment
+uploads objects and manifests first, then merges the one catalog entry atomically
+under a lock. Updating the same ID preserves its position; new IDs are appended.
+Keep older objects and manifests for active sessions. To remove a pack, remove its
+entry from `mods.json`; do not delete objects still referenced by other packs or
+the original manifest. Do not run simultaneous local `mod-pack` builds into the
+same output directory. A missing catalog means no packs; other catalog errors and
+missing or corrupt selected resources are reported instead of silently using originals.

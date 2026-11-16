@@ -1,6 +1,7 @@
 import './controls.mjs';
 import { enterFullscreen, requestLaunchFullscreen } from './fullscreen.mjs';
 import { AssetSource } from './assets.mjs';
+import { discoverMods, applyMods } from './mods.mjs';
 import { VirtualFileSystem } from './vfs.mjs';
 import { carPaths, gamePaths, initialPaths } from './startup-assets.mjs';
 import { apply, detectLocale, getLocale, onLocaleChange, setLocale, t } from './i18n.mjs';
@@ -62,6 +63,31 @@ const dynamic = new Map();
 const say = (node, render) => { dynamic.set(node, render); node.textContent = render(); };
 const message = (key, params) => () => t(key, params);
 onLocaleChange(() => { apply(); for (const [node, render] of dynamic) node.textContent = render(); });
+const dataBase = new URL(new URLSearchParams(location.search).get('data') || './data/', location.href);
+const modSettings = document.querySelector('#mod-settings');
+const modList = document.querySelector('#mod-list');
+let modChoices;
+async function loadMods() {
+  start.disabled = true;
+  const packs = await discoverMods(dataBase);
+  modChoices = packs.map(pack => {
+    const label = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = pack.enabled_by_default;
+    const text = document.createElement('span');
+    const name = document.createElement('strong');
+    name.textContent = pack.name;
+    const description = document.createElement('small');
+    description.textContent = pack.description;
+    text.append(name, description);
+    label.append(input, text);
+    modList.append(label);
+    return {pack, input};
+  });
+  modSettings.hidden = packs.length === 0;
+  start.disabled = launching;
+}
 let fs, initialized = false;
 let recovery = false;
 let launching = false;
@@ -83,6 +109,7 @@ function showLoading(stage, key, { compact = false } = {}) {
   errorText.textContent = '';
   start.hidden = true;
   if (unlockName) unlockName.disabled = true;
+  modSettings.disabled = true;
   progress.removeAttribute('value');
   count.textContent = ''; dynamic.delete(count);
   percent.textContent = '…';
@@ -139,6 +166,7 @@ const report = (error, {compact = false} = {}) => {
   start.hidden = false;
   start.disabled = false;
   if (unlockName) unlockName.disabled = false;
+  modSettings.disabled = recovery || !!retryResources;
   loader.hidden = false;
   say(start, () => t(recovery ? 'action.reload' : 'action.retry'));
   if (recovery) flush();
@@ -185,8 +213,13 @@ async function launch({ gesture = false } = {}) {
         return WebAssembly.compile(await response.arrayBuffer());
       })(),
     ]).then(value => ({value}), error => ({error}));
-    if (!fs) {
-      const source = await AssetSource.open(new URLSearchParams(location.search).get('data') || './data/');
+    if (!modChoices) await loadMods();
+    modSettings.disabled = true;
+    const selectedMods = modChoices.filter(choice => choice.input.checked).map(choice => choice.pack);
+    if (!initialized) {
+      const baseSource = await AssetSource.open(dataBase);
+      const source = await applyMods(baseSource, selectedMods);
+      await flush();
       fs = new VirtualFileSystem(source);
       globalThis.nfsVfs = fs;
       try { await fs.openSaves(); } catch (error) { say(saveStatus, message('saves.temporary', {error: error.message})); }
@@ -277,3 +310,5 @@ new MutationObserver(() => {
   new MutationObserver(() => showRenderSize(canvas)).observe(canvas, {attributes:true, attributeFilter:['width', 'height']});
   showRenderSize(canvas);
 }).observe(document.body, {childList:true});
+
+void loadMods().catch(report);

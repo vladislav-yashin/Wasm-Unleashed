@@ -65,3 +65,17 @@ The web build serves a search-indexable landing page at `/` and the game at
 `game.html`. Tailwind CSS is compiled locally. Pass the actual public URL with
 `python3 tools/web/build.py --site-url https://your-host.example/` to generate
 canonical metadata and a sitemap. See [landing page and SEO](packaging/web/README.md#landing-page-and-seo).
+
+### Mod packs
+
+Select resource override packs on the launch screen. Each pack has a `mod.json`
+with `id`, `name`, `description` and `enabled_by_default`, plus replacement files
+at their game-relative paths. Later selected packs take priority.
+
+```sh
+make mod-pack MOD_DIR=/path/to/custom-cars
+make deploy-mod MOD_DIR=/path/to/custom-cars DEPLOY_SSH_HOST=server.example \
+  DEPLOY_SSH_USER=admin
+```
+
+See [mod pack setup and deployment](packaging/web/README.md#mod-packs).

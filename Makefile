@@ -15,6 +15,8 @@ WASM_TARGET ?= wasm32-unknown-unknown
 GAME_DIR ?=
 MOVIE_EXE ?=
 WEB_DATA ?= web-data
+MOD_DIR ?=
+DEPLOY_DATA_DIR ?= /srv/open-unleashed/web-data
 EXTRA_FILES ?=
 
 WEB_HOST ?= 127.0.0.1
@@ -33,7 +35,7 @@ WASM_BINDGEN_VERSION := $(shell awk '/^name = "wasm-bindgen"$$/{getline; gsub(/v
 
 .PHONY: help setup-web install-wasm-bindgen build-web web-data serve relay-build relay \
 	test test-rust test-web check-wasm check-deploy ci fmt fmt-check \
-	deploy-sync \
+	deploy-sync mod-pack deploy-mod \
 	docker-up docker-down docker-logs clean clean-all
 
 help:
@@ -42,6 +44,7 @@ help:
 		'  make setup-web                  install WASM target and wasm-bindgen CLI' \
 		'  make build-web                  build dist/ (WEB_BUILD_FLAGS=--debug for a debug build)' \
 		'  make web-data GAME_DIR=...      prepare web-data; movie executable auto-detected' \
+		'  make mod-pack MOD_DIR=...        build/register a mod pack in WEB_DATA' \
 		'  make serve                      serve dist/ and web-data, starting the relay too' \
 		'  make relay-build                build the relay binary used by serve' \
 		'  make relay                      run a standalone UDP relay on 127.0.0.1:8090' \
@@ -62,12 +65,15 @@ help:
 		'  make fmt-check                  check Rust formatting' \
 		'' \
 		'Deployment:' \
+		'  make deploy-mod MOD_DIR=...      build and upload one mod to DEPLOY_SSH_HOST' \
 		'  make deploy-sync                sync the compose file and helper to DEPLOY_SSH_HOST' \
 		'' \
 		'Variables:' \
 		'  GAME_DIR       original installation root containing GameData/ and FEData/' \
 		'  MOVIE_EXE      optional PE image override; auto-detected by compatibility' \
 		'  WEB_DATA       data directory (default: web-data)' \
+		'  MOD_DIR        mod source directory containing mod.json and replacement files' \
+		'  DEPLOY_DATA_DIR server data mount (default: /srv/open-unleashed/web-data)' \
 		'  EXTRA_FILES    additional root files for web-data, space-separated' \
 		'  WEB_HOST       local server host (default: 127.0.0.1)' \
 		'  WEB_PORT       local server port (default: 8080)' \
@@ -114,6 +120,17 @@ web-data:
 		$(foreach file,$(EXTRA_FILES),--extra-file "$(file)")
 	@$(PYTHON) -c "import json, sys; files=json.load(open('$(WEB_DATA)/manifest.json'))['files']; sys.exit(0 if 'madtables.bin' in files else 'madtables.bin missing from web-data')"
 
+mod-pack:
+	@test -n "$(MOD_DIR)" || { echo "MOD_DIR is required" >&2; exit 2; }
+	$(PYTHON) tools/web/mod_pack.py "$(MOD_DIR)" "$(WEB_DATA)"
+
+deploy-mod:
+	@test -n "$(MOD_DIR)" || { echo "MOD_DIR is required" >&2; exit 2; }
+	@test -n "$(DEPLOY_SSH_HOST)" || { echo "DEPLOY_SSH_HOST is required" >&2; exit 2; }
+	$(PYTHON) tools/web/deploy_mod.py "$(MOD_DIR)" \
+		--host "$(if $(DEPLOY_SSH_USER),$(DEPLOY_SSH_USER)@,)$(DEPLOY_SSH_HOST)" \
+		--port "$(DEPLOY_SSH_PORT)" --remote-data "$(DEPLOY_DATA_DIR)"
+
 relay-build:
 	$(CARGO) +$(RUST_TOOLCHAIN) build --locked -p nfs-relay
 
@@ -131,7 +148,7 @@ test-rust:
 
 test-web:
 	$(PYTHON) -m unittest discover -s tools/web -p 'test_*.py'
-	node --test packaging/web/assets.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs packaging/web/unlock-all.test.mjs packaging/web/startup-assets.test.mjs packaging/web/net.test.mjs
+	node --test packaging/web/assets.test.mjs packaging/web/mods.test.mjs packaging/web/vfs.test.mjs packaging/web/i18n.test.mjs packaging/web/controls.test.mjs packaging/web/fullscreen.test.mjs packaging/web/render-scale.test.mjs packaging/web/unlock-all.test.mjs packaging/web/startup-assets.test.mjs packaging/web/net.test.mjs
 
 check-wasm:
 	$(CARGO) +$(RUST_TOOLCHAIN) check --locked -p open-unleashed --target $(WASM_TARGET)

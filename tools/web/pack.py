@@ -132,8 +132,8 @@ def compress_object(target: Path) -> None:
         sidecar.unlink(missing_ok=True)
 
 
-def publish(source: Path, output: Path, extra_files=()):
-    if not all((source / name).is_dir() for name in ('GameData', 'FEData')):
+def publish(source: Path, output: Path, extra_files=(), *, mod=False):
+    if not mod and not all((source / name).is_dir() for name in ('GameData', 'FEData')):
         raise ValueError('source must contain GameData and FEData')
     source, output = source.resolve(), output.resolve()
     if source == output or source in output.parents:
@@ -149,7 +149,9 @@ def publish(source: Path, output: Path, extra_files=()):
     extra_files = [Path(p).resolve() for p in extra_files]
     paths = [p for root in ('GameData', 'FEData') for p in (source / root).rglob('*')]
     # Root configuration, movie tables and fallback executable data are consumed by parsers.
-    paths += [p for p in source.iterdir() if p.is_file()]
+    paths += [p for p in source.iterdir() if p.is_file() and (not mod or p.name != 'mod.json')]
+    if mod:
+        paths = [p for p in source.rglob('*') if p != source / 'mod.json']
     paths += extra_files
     for path in sorted(set(paths)):
         if not path.is_file():
@@ -214,6 +216,8 @@ def publish(source: Path, output: Path, extra_files=()):
     for url in sorted(urls):
         compress_object(output / url)
     manifest = {'schema': 1, 'version': version, 'files': files}
+    if mod:
+        return manifest
     temporary = output / 'manifest.json.tmp'
     temporary.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
     temporary.replace(output / 'manifest.json')

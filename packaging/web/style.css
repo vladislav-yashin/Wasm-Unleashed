@@ -80,3 +80,5 @@
 #loader[data-presentation="compact"] #loading-details{grid-column:1/-1;margin-top:14px}
 /* The player left through the in-game Exit: the shell is saving and returning home. */
 :root[data-game-mode="exited"] :is(canvas#game,#tools,#tools-toggle,#touch){display:none}
+
+#mod-settings{margin:16px 0;padding:12px;border:1px solid #82755e;min-width:0}#mod-settings[hidden]{display:none}#mod-settings legend{font-size:14px}#mod-settings p{font-size:12px;color:#aaa697;margin:0 0 10px}#mod-list{max-height:180px;overflow:auto}#mod-list label{display:flex;gap:10px;align-items:flex-start;padding:6px 0;cursor:pointer}#mod-list input{margin-top:3px}#mod-list span{min-width:0;overflow-wrap:anywhere}#mod-list strong{display:block;font-size:13px}#mod-list small{display:block;color:#aaa697;line-height:1.5}#mod-settings:disabled{opacity:.55}#loader[data-presentation="compact"] #mod-settings{display:none}

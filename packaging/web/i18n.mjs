@@ -12,6 +12,8 @@ const STORAGE_KEY = 'wasm-unleashed-locale';
 
 export const CATALOG = {
   en: {
+    "mods.title": "Mod packs",
+    "mods.hint": "Selected packs override game files. Later packs take priority.",
     "loader.edition": "Browser edition",
     "loader.title": "Your next drive awaits.",
     "loader.stages": "Loading stages",
@@ -69,6 +71,8 @@ export const CATALOG = {
     'error.contextLost': 'Graphics context lost. Reload the game to restore the saved profile.',
   },
   ru: {
+    "mods.title": "Мод-паки",
+    "mods.hint": "Выбранные паки заменяют файлы игры. Нижние паки имеют приоритет.",
     "loader.edition": "Браузерная версия",
     "loader.title": "Ваша следующая гонка ждёт.",
     "loader.stages": "Этапы загрузки",
@@ -126,6 +130,8 @@ export const CATALOG = {
     'error.contextLost': 'Графический контекст потерян. Перезагрузите игру, чтобы восстановить сохранённый профиль.',
   },
   de: {
+    "mods.title": "Mod-Pakete",
+    "mods.hint": "Ausgewählte Pakete ersetzen Spieldateien. Spätere Pakete haben Vorrang.",
     "loader.edition": "Browser-Version",
     "loader.title": "Deine nächste Fahrt wartet.",
     "loader.stages": "Ladeschritte",
@@ -183,6 +189,8 @@ export const CATALOG = {
     'error.contextLost': 'Grafikkontext verloren. Laden Sie das Spiel neu, um das gespeicherte Profil wiederherzustellen.',
   },
   fr: {
+    "mods.title": "Packs de mods",
+    "mods.hint": "Les packs sélectionnés remplacent les fichiers du jeu. Les derniers sont prioritaires.",
     "loader.edition": "Version navigateur",
     "loader.title": "La route vous attend.",
     "loader.stages": "Étapes du chargement",
@@ -240,6 +248,8 @@ export const CATALOG = {
     'error.contextLost': 'Contexte graphique perdu. Rechargez le jeu pour restaurer le profil enregistré.',
   },
   it: {
+    "mods.title": "Pacchetti mod",
+    "mods.hint": "I pacchetti selezionati sostituiscono i file di gioco. Gli ultimi hanno la precedenza.",
     "loader.edition": "Versione browser",
     "loader.title": "La tua prossima corsa ti aspetta.",
     "loader.stages": "Fasi di caricamento",
@@ -297,6 +307,8 @@ export const CATALOG = {
     'error.contextLost': 'Contesto grafico perso. Ricarica il gioco per ripristinare il profilo salvato.',
   },
   es: {
+    "mods.title": "Paquetes de mods",
+    "mods.hint": "Los paquetes seleccionados reemplazan archivos del juego. Los últimos tienen prioridad.",
     "loader.edition": "Versión para navegador",
     "loader.title": "Tu próxima carrera te espera.",
     "loader.stages": "Etapas de carga",
